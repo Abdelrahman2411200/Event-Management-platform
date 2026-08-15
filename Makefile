@@ -7,7 +7,7 @@ test:
 	mvn test
 
 frontend-install:
-	npm --prefix frontend install
+	npm --prefix frontend ci
 
 frontend-lint:
 	npm --prefix frontend run lint

@@ -76,7 +76,7 @@ mvn -pl event-service -am package -DskipTests
 Frontend commands:
 
 ```bash
-npm --prefix frontend install
+npm --prefix frontend ci
 npm --prefix frontend audit --audit-level=high
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
@@ -160,7 +160,7 @@ The PostgreSQL container creates six logical databases with distinct owners: `au
 ## API and operational conventions
 
 - Public application endpoints begin with `/api/v1`.
-- Every backend exposes liveness, readiness, service info, Prometheus metrics, OpenAPI JSON, and Swagger UI where appropriate.
+- Every backend exposes liveness, readiness, service info, Prometheus metrics, OpenAPI JSON, and Swagger UI where appropriate. These operational endpoints are available without application authentication for local health checks and Prometheus scraping.
 - Domain-service readiness includes the service-owned database. Kafka is present for future asynchronous contracts but is not used by a Phase 1 business flow.
 - `X-Correlation-Id` is accepted or generated at the edge, forwarded downstream, returned to callers, and included in logging context.
 - W3C `traceparent` propagation is handled independently through Micrometer and OpenTelemetry.
@@ -176,6 +176,7 @@ Completed in Phase 1:
 - Buildable API gateway and six data-owning Spring Boot services
 - React, TypeScript, and Tailwind frontend shell
 - Flyway baseline per service with no premature business tables
+- PostgreSQL connection privileges that restrict each service login to its owned database
 - Kafka-only local messaging infrastructure
 - Database-per-service ownership and local credentials
 - Standard API errors, correlation IDs, OpenAPI, actuator probes, metadata, metrics, and tracing export

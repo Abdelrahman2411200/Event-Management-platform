@@ -15,4 +15,23 @@ class CorrelationIdsTest {
     void replacesUnsafeIncomingValue() {
         assertThat(CorrelationIds.resolve("unsafe value\n")).isNotEqualTo("unsafe value\n");
     }
+
+    @Test
+    void replacesBlankIncomingValue() {
+        assertThat(CorrelationIds.resolve("   ")).matches("[0-9a-f-]{36}");
+    }
+
+    @Test
+    void acceptsTheMaximumSafeLength() {
+        String candidate = "a".repeat(128);
+
+        assertThat(CorrelationIds.resolve(candidate)).isEqualTo(candidate);
+    }
+
+    @Test
+    void replacesValuesLongerThanTheMaximum() {
+        String candidate = "a".repeat(129);
+
+        assertThat(CorrelationIds.resolve(candidate)).isNotEqualTo(candidate);
+    }
 }
