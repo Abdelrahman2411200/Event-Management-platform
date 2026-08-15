@@ -13,15 +13,35 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
   flyway:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 platform:
   metadata:
-    description: Authentication and authorization boundary; business capabilities are deferred
+    description: Authentication, refresh-session, RBAC, OAuth2 client, and security-audit boundary
     version: ${APP_VERSION:@project.version@}
     api-version: v1
+  auth:
+    bcrypt-strength: ${AUTH_BCRYPT_STRENGTH:12}
+    jwt:
+      issuer: ${JWT_ISSUER:urn:event-platform:auth}
+      audience: ${JWT_AUDIENCE:event-platform-api}
+      access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:10m}
+      refresh-token-ttl: ${JWT_REFRESH_TOKEN_TTL:30d}
+      private-key-location: ${JWT_PRIVATE_KEY_LOCATION:}
+      public-key-location: ${JWT_PUBLIC_KEY_LOCATION:}
+      allow-ephemeral-key: ${JWT_ALLOW_EPHEMERAL_KEY:true}
+    oauth2:
+      enabled: ${OAUTH2_ENABLED:false}
+    bootstrap-admin:
+      enabled: ${AUTH_BOOTSTRAP_ADMIN_ENABLED:false}
+      email: ${AUTH_BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:}
 management:
   endpoints:
     web:

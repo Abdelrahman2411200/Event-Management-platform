@@ -10,6 +10,7 @@ frontend/.npm-cache/
 .env.local
 .env.*.local
 !.env.example
+.local/
 
 # IDE and operating-system files
 .idea/

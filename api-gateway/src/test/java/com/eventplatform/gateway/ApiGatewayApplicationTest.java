@@ -10,7 +10,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 @AutoConfigureObservability
 @AutoConfigureWebTestClient
 @SpringBootTest(properties = {
-    "spring.cloud.gateway.server.webflux.enabled=false",
+    "management.health.redis.enabled=false",
+    "management.endpoint.health.group.readiness.include=readinessState",
     "management.tracing.enabled=false"
 }, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ApiGatewayApplicationTest {
@@ -42,6 +43,18 @@ class ApiGatewayApplicationTest {
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(body -> org.assertj.core.api.Assertions.assertThat(body).contains("jvm_info"));
+    }
+
+    @Test
+    void openApiDocumentsTheAuthenticationEdgeContract() {
+        webTestClient.get()
+                .uri("/v3/api-docs")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$['paths']['/api/v1/auth/register']['post']").exists()
+                .jsonPath("$['paths']['/api/v1/auth/logout']['post']['security'][0]['bearerAuth']").isArray()
+                .jsonPath("$['components']['securitySchemes']['bearerAuth']['scheme']").isEqualTo("bearer");
     }
 
     @Test

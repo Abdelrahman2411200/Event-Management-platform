@@ -45,6 +45,15 @@ class AuthServiceApplicationTest {
     }
 
     @Test
+    void openApiDocumentsVersionedAuthenticationAndBearerSecurity() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$['paths']['/api/v1/auth/register']['post']").exists())
+                .andExpect(jsonPath("$['paths']['/api/v1/auth/me']['get']['security'][0]['bearerAuth']").isArray())
+                .andExpect(jsonPath("$['components']['securitySchemes']['bearerAuth']['scheme']").value("bearer"));
+    }
+
+    @Test
     void deniedRequestsUseTheStandardErrorContract() throws Exception {
         mockMvc.perform(get("/api/v1/not-implemented")
                         .header("X-Correlation-Id", "auth-denied-123"))

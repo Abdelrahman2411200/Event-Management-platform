@@ -1,144 +1,148 @@
 # Event Management Platform
 
-A local-first, cloud-ready event management platform organized as independently buildable Spring Boot services and a React frontend.
-
-Phase 1 is a foundation release. It provides service boundaries, build and test infrastructure, versioning and error conventions, local data and messaging infrastructure, observability, Docker execution, CI, and architecture decisions. It intentionally does **not** implement authentication, event, venue, attendee, booking, payment, or notification business features.
+A local-first, cloud-ready microservices platform built with Spring Boot and React. Phase 2 adds the authentication and API-gateway security boundary; event, venue, attendee, payment, and notification business capabilities remain intentionally unimplemented.
 
 ## Technology baseline
 
-- Java 17, Spring Boot 3.5.14, Spring Security, Spring Cloud Gateway, Spring Data JPA
-- React 19, TypeScript, Vite, Tailwind CSS
-- PostgreSQL, Redis, Apache Kafka in KRaft mode
-- Flyway for all service-owned database migrations
-- Docker and Docker Compose
-- Prometheus, Grafana, Loki, OpenTelemetry Collector, and Jaeger
-- GitHub Actions for backend and frontend validation
+- Java 17 bytecode, Spring Boot 3.5, Spring Security, Spring Cloud Gateway, Spring Data JPA
+- React 19, TypeScript, Vite, and Tailwind CSS
+- PostgreSQL, Redis, and Apache Kafka in KRaft mode
+- Flyway database migrations
+- Docker Compose, Prometheus, Grafana, Loki, OpenTelemetry, and Jaeger
+- GitHub Actions for backend, frontend, and Compose validation
 
-Kubernetes, Helm, Terraform, AWS, and cloud-managed services are future deployment concerns. They are not needed to build, test, or run Phase 1 locally. MinIO is not included because this phase has no object-storage use case; a local S3-compatible adapter will be added when a real use case exists.
+Kubernetes, Helm, Terraform, AWS, external OAuth providers, and cloud-managed services are not required to build, test, or run the repository locally. MinIO remains deferred because no current feature stores objects.
 
 ## Repository structure
 
 ```text
 .
-├── api-gateway/              # Reactive Spring Cloud Gateway
-├── auth-service/             # Authentication boundary skeleton
-├── event-service/            # Event boundary skeleton
-├── venue-service/            # Venue boundary skeleton
-├── attendee-service/         # Attendee and future booking boundary skeleton
-├── payment-service/          # Payment boundary skeleton
-├── notification-service/     # Notification boundary skeleton
-├── frontend/                 # React + TypeScript + Tailwind shell
-├── shared/
-│   ├── platform-contracts/   # Domain-free error/correlation contracts
-│   ├── platform-web/         # Servlet error, security, OpenAPI, metadata baseline
-│   └── data-service-parent/  # Build-only Maven parent for data-owning services
-├── docker/                   # Backend image and PostgreSQL bootstrap
-├── observability/            # Local Prometheus, Loki, OTel, and Grafana config
-├── docs/                     # Architecture, conventions, and ADRs
-├── compose.yaml
-├── Makefile
-└── pom.xml
+|-- api-gateway/              # Routing, JWT validation, CORS, headers, Redis rate limits
+|-- auth-service/             # Accounts, credentials, tokens, roles, OAuth client, audits
+|-- event-service/            # Phase 1 boundary skeleton
+|-- venue-service/            # Phase 1 boundary skeleton
+|-- attendee-service/         # Phase 1 boundary skeleton
+|-- payment-service/          # Phase 1 boundary skeleton
+|-- notification-service/     # Phase 1 boundary skeleton
+|-- frontend/                 # React + TypeScript + Tailwind shell
+|-- shared/                   # Narrow, domain-free technical contracts and web baseline
+|-- docker/                   # Backend image and PostgreSQL bootstrap
+|-- observability/            # Local metrics, logs, and traces
+|-- docs/                     # Architecture, security guidance, and ADRs
+|-- compose.yaml
+|-- Makefile
+`-- pom.xml
 ```
 
-The shared modules contain only narrow technical code. They contain no business entities, repositories, services, or domain events.
+Each service owns its data. Shared modules contain no business entities, repositories, roles, or domain events.
 
 ## Prerequisites
 
-- JDK 17
+- A JDK capable of compiling Java 17 (JDK 17 or newer; the project compiles with `--release 17`)
 - Maven 3.9+
-- Node.js 20.19+ (Node 24 is used in CI)
-- npm 11+
+- Node.js 20.19+ and npm 11+
 - Docker with Docker Compose
 
-No AWS account, credentials, Kubernetes cluster, or external provider account is required.
+Confirm the toolchain with `mvn -version`. Maven reports the Java runtime it actually uses; this is authoritative even if a separate shell cannot initially find `java` on `PATH`.
 
 ## Build and test
 
-From the repository root:
+Run from the repository root:
 
 ```bash
 mvn clean verify
-```
-
-Useful backend commands:
-
-```bash
-# Compile every Maven module without tests
-mvn clean compile
-
-# Run every backend test
-mvn test
-
-# Package one service and everything it depends on
-mvn -pl event-service -am package -DskipTests
-```
-
-Frontend commands:
-
-```bash
 npm --prefix frontend ci
 npm --prefix frontend audit --audit-level=high
 npm --prefix frontend run lint
 npm --prefix frontend run typecheck
 npm --prefix frontend run build
-npm --prefix frontend run dev
+docker compose --profile full-stack config --quiet
 ```
 
-The repository also provides equivalent Make targets:
+Focused Phase 2 backend tests:
 
 ```bash
-make build
-make test
-make frontend-check
+mvn -pl auth-service,api-gateway -am test
 ```
+
+Equivalent root targets include `make build`, `make test`, `make frontend-check`, `make infra-up`, `make infra-down`, `make full-stack`, and `make down`.
 
 ## Run locally
 
-### Core infrastructure only
-
-Starts PostgreSQL, Redis, and Kafka and waits for their health checks:
+Start only PostgreSQL, Redis, and Kafka:
 
 ```bash
 docker compose up -d --wait
-```
-
-Stop core infrastructure without deleting data:
-
-```bash
 docker compose down
 ```
 
-### Core infrastructure plus observability
-
-```bash
-docker compose --profile observability up -d --wait
-```
-
-### Complete stack
-
-Builds and starts all backend services, the frontend, core infrastructure, and observability:
+Start the complete application and observability stack:
 
 ```bash
 docker compose --profile full-stack up -d --build --wait
-```
-
-Open the frontend at [http://localhost:3000](http://localhost:3000).
-
-Stop every profile without deleting volumes:
-
-```bash
 docker compose --profile full-stack --profile observability down
 ```
 
-To remove local development data as well, add `--volumes` to that final command. This permanently deletes the Compose-managed PostgreSQL, Redis, Kafka, Prometheus, Grafana, and Loki volumes.
+The second command preserves volumes. Adding `--volumes` permanently removes Compose-managed local data.
 
-Optional port and local-only credential overrides are documented in `.env.example`. Copy it to `.env` only when an override is needed. Never place real credentials in committed files or reuse the included development values outside a local machine.
+Copy `.env.example` to an uncommitted `.env` only when overriding local defaults. The default auth service generates an ephemeral 2048-bit RSA key so no secret is required locally; all access tokens become invalid when that service restarts. Persistent signing keys, OAuth credentials, and bootstrap-admin credentials must be supplied privately through environment/configuration and must never be committed. See [authentication and gateway security](docs/architecture/security.md).
+
+## Authentication quick start
+
+All browser and public API traffic should enter through `http://localhost:8080`. In PowerShell:
+
+```powershell
+$registration = @{
+  email = "attendee@example.com"
+  password = "local-password-42"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8080/api/v1/auth/register `
+  -ContentType application/json -Body $registration
+
+$tokens = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8080/api/v1/auth/login `
+  -ContentType application/json -Body $registration
+
+Invoke-RestMethod -Uri http://localhost:8080/api/v1/auth/me `
+  -Headers @{ Authorization = "Bearer $($tokens.accessToken)" }
+
+$rotated = Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8080/api/v1/auth/refresh `
+  -ContentType application/json `
+  -Body (@{ refreshToken = $tokens.refreshToken } | ConvertTo-Json)
+
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8080/api/v1/auth/logout `
+  -Headers @{ Authorization = "Bearer $($rotated.accessToken)" }
+```
+
+Self-registration always creates `ATTENDEE`; client-supplied role fields are ignored by the request contract. `ORGANIZER`, `EVENT_STAFF`, and `ADMIN` are assigned only by the admin-protected role endpoint. An initial admin can be provisioned explicitly with the three `AUTH_BOOTSTRAP_ADMIN_*` settings documented in `.env.example`; it is disabled by default and has no default password.
+
+OAuth2 login is also disabled by default. When enabled, providers use Spring Security's standard client-registration properties, and the callback accepts only a provider-authenticated identity with a verified email. It never automatically links an OAuth identity to an existing password account.
+
+## Phase 2 API surface
+
+| Method and path | Access | Purpose |
+| --- | --- | --- |
+| `POST /api/v1/auth/register` | Public, rate limited | Create an attendee account |
+| `POST /api/v1/auth/login` | Public, rate limited | Issue access and refresh tokens |
+| `POST /api/v1/auth/refresh` | Public, rate limited | Rotate a refresh token |
+| `GET /api/v1/auth/.well-known/jwks.json` | Public | Publish current RSA public key |
+| `GET /api/v1/auth/me` | Bearer token | Return the current account |
+| `POST /api/v1/auth/logout` | Bearer token | Revoke the token's refresh session |
+| `POST /api/v1/auth/sessions/revoke-all` | Bearer token | Revoke every refresh session for the user |
+| `PUT /api/v1/auth/users/{id}/roles` | `ADMIN` | Replace roles and revoke the target's sessions |
+| `GET /api/v1/auth/audit-events` | `ADMIN` | Read recent security audit events |
+
+Access tokens are signed RS256 JWTs with issuer, audience, expiry, subject, unique ID, type, roles, and refresh-session ID claims. Refresh tokens are opaque random values; only SHA-256 hashes are stored. Rotation is single-use, and replay revokes the active token family.
 
 ## Local endpoints
 
-| Component | Port | Health | OpenAPI / UI |
+| Component | Port | Readiness | OpenAPI / UI |
 | --- | ---: | --- | --- |
-| Frontend | 3000 | `/` | — |
+| Frontend | 3000 | `/` | - |
 | API gateway | 8080 | `/actuator/health/readiness` | `/v3/api-docs`, `/swagger-ui/index.html` |
 | Auth service | 8081 | `/actuator/health/readiness` | `/v3/api-docs`, `/swagger-ui/index.html` |
 | Event service | 8082 | `/actuator/health/readiness` | `/v3/api-docs`, `/swagger-ui/index.html` |
@@ -146,53 +150,19 @@ Optional port and local-only credential overrides are documented in `.env.exampl
 | Attendee service | 8084 | `/actuator/health/readiness` | `/v3/api-docs`, `/swagger-ui/index.html` |
 | Payment service | 8085 | `/actuator/health/readiness` | `/v3/api-docs`, `/swagger-ui/index.html` |
 | Notification service | 8086 | `/actuator/health/readiness` | `/v3/api-docs`, `/swagger-ui/index.html` |
-| PostgreSQL | 5432 | Compose health check | — |
-| Redis | 6379 | Compose health check | — |
-| Kafka | 9092 | Compose health check | — |
-| Prometheus | 9090 | `/-/ready` | [http://localhost:9090](http://localhost:9090) |
-| Grafana | 3001 | `/api/health` | [http://localhost:3001](http://localhost:3001) |
-| Loki | 3100 | `/ready` | — |
-| Jaeger | 16686 | — | [http://localhost:16686](http://localhost:16686) |
-| OTel Collector | 4317 / 4318 | — | OTLP gRPC / HTTP |
+| PostgreSQL / Redis / Kafka | 5432 / 6379 / 9092 | Compose health checks | - |
+| Prometheus / Grafana / Loki | 9090 / 3001 / 3100 | Component health endpoints | Local UIs where applicable |
+| Jaeger / OTLP | 16686 / 4317, 4318 | Container status | Trace UI / ingestion |
 
-The PostgreSQL container creates six logical databases with distinct owners: `auth_service`, `event_service`, `venue_service`, `attendee_service`, `payment_service`, and `notification_service`. Only the owning service may access its database.
+## Platform conventions and phase boundary
 
-## API and operational conventions
+- Public application endpoints use `/api/v1`.
+- API failures share `timestamp`, `status`, `error`, `code`, `message`, `path`, `correlationId`, and optional `validationDetails`.
+- `X-Correlation-Id` is validated/generated at the gateway, forwarded downstream, returned, and included in logging context. W3C trace context remains independent.
+- The gateway validates JWTs before forwarding protected routes, removes untrusted identity headers, preserves the original bearer token, enforces explicit-origin CORS, applies security headers, and rate-limits authentication endpoints through Redis.
+- Domain services still independently deny application routes in Phase 2. Later phases must add resource-server authorization to a service before exposing its domain APIs.
+- Kafka remains the only message broker. No Phase 2 authentication action publishes domain events or creates outbox/Saga behavior.
 
-- Public application endpoints begin with `/api/v1`.
-- Every backend exposes liveness, readiness, service info, Prometheus metrics, OpenAPI JSON, and Swagger UI where appropriate. These operational endpoints are available without application authentication for local health checks and Prometheus scraping.
-- Domain-service readiness includes the service-owned database. Kafka is present for future asynchronous contracts but is not used by a Phase 1 business flow.
-- `X-Correlation-Id` is accepted or generated at the edge, forwarded downstream, returned to callers, and included in logging context.
-- W3C `traceparent` propagation is handled independently through Micrometer and OpenTelemetry.
-- API failures use the shared error shape with `timestamp`, `status`, `error`, `code`, `message`, `path`, `correlationId`, and `validationDetails`.
-- Operational and documentation endpoints are public in Phase 1. All other direct domain-service requests are denied until authentication and explicit endpoint policies are implemented.
+Completed in Phase 2: registration, password login, JWT/JWKS, refresh rotation and revocation, RBAC administration, optional OAuth2 client wiring, security audits, gateway validation and protections, Flyway auth schema, tests, and local configuration. Event, venue, attendee, booking, payment, notification, object-storage, and deployment features remain deferred.
 
-See [system context](docs/architecture/system-context.md), [API conventions](docs/architecture/api-conventions.md), and the [ADR index](docs/adr/README.md) for the binding architecture rules.
-
-## Phase status
-
-Completed in Phase 1:
-
-- Buildable API gateway and six data-owning Spring Boot services
-- React, TypeScript, and Tailwind frontend shell
-- Flyway baseline per service with no premature business tables
-- PostgreSQL connection privileges that restrict each service login to its owned database
-- Kafka-only local messaging infrastructure
-- Database-per-service ownership and local credentials
-- Standard API errors, correlation IDs, OpenAPI, actuator probes, metadata, metrics, and tracing export
-- Local observability profile and full-stack Compose profile
-- CI and exact developer commands
-- ADRs for Kafka, database ownership, Saga/outbox, and API versioning
-
-Deferred to later phases:
-
-- Authentication, JWT, refresh tokens, RBAC, and OAuth2
-- Event, venue, attendee, registration, ticketing, check-in, and booking behavior
-- Payment processing, verification, refunds, and provider adapters
-- Email/SMS delivery and provider adapters
-- Object storage, maps, and AI adapters
-- Kafka event schemas, topics, consumers, outbox tables, and the booking/payment Saga implementation
-- Production log shipping rules and alerting
-- Kubernetes, Helm, Terraform, and AWS deployment
-
-Phase 2 business features should start only after choosing a bounded capability and its contract. They must preserve the decisions recorded under `docs/adr/`.
+See [system context](docs/architecture/system-context.md), [API conventions](docs/architecture/api-conventions.md), [security architecture](docs/architecture/security.md), and the [ADR index](docs/adr/README.md).
