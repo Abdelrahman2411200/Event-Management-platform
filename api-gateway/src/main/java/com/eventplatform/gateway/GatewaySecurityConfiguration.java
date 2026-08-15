@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
@@ -44,6 +45,12 @@ public class GatewaySecurityConfiguration {
                                 "/api/v1/auth/.well-known/jwks.json",
                                 "/oauth2/**",
                                 "/login/oauth2/**")
+                        .permitAll()
+                        .pathMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/events",
+                                "/api/v1/events/*",
+                                "/api/v1/event-categories")
                         .permitAll()
                         .pathMatchers("/api/v1/**")
                         .authenticated()

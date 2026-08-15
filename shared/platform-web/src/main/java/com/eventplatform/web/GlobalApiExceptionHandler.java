@@ -3,6 +3,7 @@ package com.eventplatform.web;
 import com.eventplatform.contracts.ApiError;
 import com.eventplatform.contracts.ValidationError;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -47,6 +49,19 @@ public class GlobalApiExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 "BAD_REQUEST",
                 "Request body or parameters are malformed",
+                request,
+                List.of());
+    }
+
+    @ExceptionHandler({
+        HandlerMethodValidationException.class,
+        ConstraintViolationException.class
+    })
+    ResponseEntity<ApiError> handleMethodValidation(Exception exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "Request validation failed",
                 request,
                 List.of());
     }

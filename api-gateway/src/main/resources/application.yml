@@ -24,7 +24,7 @@ spring:
             - id: event-service
               uri: ${EVENT_SERVICE_URL:http://localhost:8082}
               predicates:
-                - Path=/api/v1/events/**
+                - Path=/api/v1/events/**,/api/v1/event-categories/**
             - id: venue-service
               uri: ${VENUE_SERVICE_URL:http://localhost:8083}
               predicates:

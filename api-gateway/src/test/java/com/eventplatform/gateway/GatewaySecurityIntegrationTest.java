@@ -50,13 +50,33 @@ class GatewaySecurityIntegrationTest {
                 .expectStatus().value(status -> assertThat(status).isNotEqualTo(401));
 
         webTestClient.get()
-                .uri("/api/v1/events/example")
+                .uri("/api/v1/events")
+                .exchange()
+                .expectStatus().value(status -> assertThat(status).isNotEqualTo(401));
+
+        webTestClient.get()
+                .uri("/api/v1/events/00000000-0000-0000-0000-000000000000")
+                .exchange()
+                .expectStatus().value(status -> assertThat(status).isNotEqualTo(401));
+
+        webTestClient.get()
+                .uri("/api/v1/event-categories")
+                .exchange()
+                .expectStatus().value(status -> assertThat(status).isNotEqualTo(401));
+
+        webTestClient.get()
+                .uri("/api/v1/attendees/example")
                 .header("X-Correlation-Id", "protected-route")
                 .exchange()
                 .expectStatus().isUnauthorized()
                 .expectHeader().valueEquals("X-Correlation-Id", "protected-route")
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("AUTHENTICATION_REQUIRED");
+
+        webTestClient.get()
+                .uri("/api/v1/events/00000000-0000-0000-0000-000000000000/ticket-types/example/inventory")
+                .exchange()
+                .expectStatus().isUnauthorized();
     }
 
     @Test
@@ -64,7 +84,7 @@ class GatewaySecurityIntegrationTest {
         when(jwtDecoder.decode("valid-token")).thenReturn(Mono.just(validJwt("valid-token")));
 
         webTestClient.get()
-                .uri("/api/v1/events/example")
+                .uri("/api/v1/attendees/example")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token")
                 .exchange()
                 .expectStatus().value(status -> assertThat(status).isNotIn(401, 403));
@@ -76,7 +96,7 @@ class GatewaySecurityIntegrationTest {
                 new JwtValidationException("invalid", List.of(new OAuth2Error("invalid_token")))));
 
         webTestClient.get()
-                .uri("/api/v1/events/example")
+                .uri("/api/v1/attendees/example")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer invalid-token")
                 .header("X-Correlation-Id", "invalid-gateway-token")
                 .exchange()

@@ -1,8 +1,8 @@
 const services = [
   ['API gateway', 'Public routing and cross-cutting policies'],
   ['Authentication', 'Identity and access boundary'],
-  ['Events', 'Event lifecycle boundary'],
-  ['Venues', 'Venue information boundary'],
+  ['Events', 'Lifecycle, discovery, and ticket inventory'],
+  ['Venues', 'Rooms, capacity, and availability'],
   ['Attendees', 'Attendance and future booking boundary'],
   ['Payments', 'Payment provider boundary'],
   ['Notifications', 'Delivery provider boundary'],
@@ -22,7 +22,7 @@ function App() {
             <span>Event Management Platform</span>
           </a>
           <span className="rounded-full border border-[#1f5038]/20 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#1f5038] backdrop-blur">
-            Phase 1
+            Phase 3
           </span>
         </header>
 
@@ -50,7 +50,7 @@ function App() {
                 <span className="absolute inline-flex size-full animate-ping rounded-full bg-[#5c9e74] opacity-60" />
                 <span className="relative inline-flex size-3 rounded-full bg-[#397b51]" />
               </span>
-              Foundation complete. Business capabilities intentionally deferred.
+              Venue and event capabilities are ready. Booking and payment remain deferred.
             </div>
           </div>
 

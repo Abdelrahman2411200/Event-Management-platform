@@ -12,6 +12,12 @@ Protected requests use `Authorization: Bearer <access-token>`. The gateway and e
 
 Public, authenticated, and admin-only auth routes are listed in [the security architecture](security.md). Roles are uppercase stable identifiers: `ATTENDEE`, `ORGANIZER`, `EVENT_STAFF`, and `ADMIN`. Authorization failures are `401` for missing or invalid authentication and `403` for an authenticated principal without authority. Bearer failures include `WWW-Authenticate: Bearer`.
 
+Phase 3 permits anonymous `GET` requests only for the paginated event list, one published-event detail, and active category list. Venue APIs, event management, ticket-product mutations, and inventory check/reserve/release APIs require bearer authentication. Organizer-owned writes accept `ORGANIZER` or `ADMIN`; category administration requires `ADMIN`.
+
+## Idempotent inventory commands
+
+Ticket inventory reserve and release endpoints require a globally unique `Idempotency-Key` containing 1-128 safe identifier characters. A stored key is bound to the authenticated requester and operation input. An exact retry returns the original or converged result; reuse by any caller or with different input returns `409 IDEMPOTENCY_KEY_REUSED`. The key is forwarded by the gateway and must also be propagated by the future attendee-service.
+
 ## Standard error body
 
 Servlet services share only the domain-free error contract and handling utilities. The reactive gateway emits the same shape:

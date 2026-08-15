@@ -1,6 +1,6 @@
 # Event Management Platform
 
-A local-first, cloud-ready microservices platform built with Spring Boot and React. Phase 2 adds the authentication and API-gateway security boundary; event, venue, attendee, payment, and notification business capabilities remain intentionally unimplemented.
+A local-first, cloud-ready microservices platform built with Spring Boot and React. Phase 3 adds venue management, event lifecycle, public discovery, ticket-product definitions, concurrency-safe inventory holds, and reliable lifecycle events. Booking, payment, issued tickets, and notification delivery remain intentionally deferred.
 
 ## Technology baseline
 
@@ -19,8 +19,8 @@ Kubernetes, Helm, Terraform, AWS, external OAuth providers, and cloud-managed se
 .
 |-- api-gateway/              # Routing, JWT validation, CORS, headers, Redis rate limits
 |-- auth-service/             # Accounts, credentials, tokens, roles, OAuth client, audits
-|-- event-service/            # Phase 1 boundary skeleton
-|-- venue-service/            # Phase 1 boundary skeleton
+|-- event-service/            # Events, categories, ticket products, inventory, outbox
+|-- venue-service/            # Venues, rooms, location metadata, availability
 |-- attendee-service/         # Phase 1 boundary skeleton
 |-- payment-service/          # Phase 1 boundary skeleton
 |-- notification-service/     # Phase 1 boundary skeleton
@@ -59,10 +59,10 @@ npm --prefix frontend run build
 docker compose --profile full-stack config --quiet
 ```
 
-Focused Phase 2 backend tests:
+Focused Phase 3 backend tests under the current JDK:
 
 ```bash
-mvn -pl auth-service,api-gateway -am test
+mvn -pl venue-service,event-service,api-gateway -am test
 ```
 
 Equivalent root targets include `make build`, `make test`, `make frontend-check`, `make infra-up`, `make infra-down`, `make full-stack`, and `make down`.
@@ -86,6 +86,8 @@ docker compose --profile full-stack --profile observability down
 The second command preserves volumes. Adding `--volumes` permanently removes Compose-managed local data.
 
 Copy `.env.example` to an uncommitted `.env` only when overriding local defaults. The default auth service generates an ephemeral 2048-bit RSA key so no secret is required locally; all access tokens become invalid when that service restarts. Persistent signing keys, OAuth credentials, and bootstrap-admin credentials must be supplied privately through environment/configuration and must never be committed. See [authentication and gateway security](docs/architecture/security.md).
+
+Phase 3 local defaults use a 15-minute ticket-inventory hold, a five-minute Redis public-event detail cache, and the Kafka topic `event-platform.event-lifecycle.v1`. They are configurable through `.env.example`; no cloud account or external maps provider is required.
 
 ## Authentication quick start
 
@@ -138,6 +140,20 @@ OAuth2 login is also disabled by default. When enabled, providers use Spring Sec
 
 Access tokens are signed RS256 JWTs with issuer, audience, expiry, subject, unique ID, type, roles, and refresh-session ID claims. Refresh tokens are opaque random values; only SHA-256 hashes are stored. Rotation is single-use, and replay revokes the active token family.
 
+## Phase 3 API surface
+
+| Boundary | Public reads | Authenticated management |
+| --- | --- | --- |
+| Categories | `GET /api/v1/event-categories` | Admin create/update/archive |
+| Events | `GET /api/v1/events`, `GET /api/v1/events/{id}` | Organizer/admin create, update, transition, archive |
+| Ticket products | Included in public event detail | Organizer/admin create, update, archive |
+| Inventory holds | None | Check, idempotent reserve, and idempotent release |
+| Venues | None | Organizer/admin venue, room, block, and reservation APIs |
+
+Publication fails unless schedule, category, venue/room capacity and availability, event capacity, and active ticket definitions are valid. Event-service never reads venue tables; it reserves availability through venue-service using the original organizer bearer token. Ticket inventory operations lock ticket rows and require `Idempotency-Key`, but they do not create bookings, payments, or issued tickets.
+
+See the [Phase 3 architecture, state diagram, contracts, and complete example requests](docs/architecture/phase-3-event-venue-inventory.md).
+
 ## Local endpoints
 
 | Component | Port | Readiness | OpenAPI / UI |
@@ -160,9 +176,9 @@ Access tokens are signed RS256 JWTs with issuer, audience, expiry, subject, uniq
 - API failures share `timestamp`, `status`, `error`, `code`, `message`, `path`, `correlationId`, and optional `validationDetails`.
 - `X-Correlation-Id` is validated/generated at the gateway, forwarded downstream, returned, and included in logging context. W3C trace context remains independent.
 - The gateway validates JWTs before forwarding protected routes, removes untrusted identity headers, preserves the original bearer token, enforces explicit-origin CORS, applies security headers, and rate-limits authentication endpoints through Redis.
-- Domain services still independently deny application routes in Phase 2. Later phases must add resource-server authorization to a service before exposing its domain APIs.
-- Kafka remains the only message broker. No Phase 2 authentication action publishes domain events or creates outbox/Saga behavior.
+- Event-service and venue-service independently validate the JWT and enforce role plus ownership rules; the gateway is not their sole authorization boundary. Other domain services continue to deny unimplemented application routes.
+- Kafka remains the only message broker. Event lifecycle and ticket-definition changes publish through event-service's transactional outbox; no code performs an ad-hoc database/Kafka dual write.
 
-Completed in Phase 2: registration, password login, JWT/JWKS, refresh rotation and revocation, RBAC administration, optional OAuth2 client wiring, security audits, gateway validation and protections, Flyway auth schema, tests, and local configuration. Event, venue, attendee, booking, payment, notification, object-storage, and deployment features remain deferred.
+Completed through Phase 3: the Phase 1 platform foundation; Phase 2 authentication and gateway security; and Phase 3 venues/rooms, availability, events/categories, lifecycle transitions, ticket products, public discovery caching, inventory holds, and lifecycle outbox. Attendee profiles, booking, issued tickets, payment, notifications, object storage, and deployment remain deferred.
 
 See [system context](docs/architecture/system-context.md), [API conventions](docs/architecture/api-conventions.md), [security architecture](docs/architecture/security.md), and the [ADR index](docs/adr/README.md).

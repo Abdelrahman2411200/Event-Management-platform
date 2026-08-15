@@ -6,6 +6,19 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  cache:
+    type: none
+  task:
+    scheduling:
+      enabled: false
+platform:
+  outbox:
+    enabled: false
+  inventory:
+    expiry-enabled: false
 management:
+  health:
+    redis:
+      enabled: false
   tracing:
     enabled: false
