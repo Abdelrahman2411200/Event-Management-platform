@@ -155,6 +155,18 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/auth_service
       DATABASE_USERNAME: auth_service
       DATABASE_PASSWORD: local_dev_only
+      JWT_ISSUER: ${JWT_ISSUER:-urn:event-platform:auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-event-platform-api}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-10m}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-30d}
+      JWT_PRIVATE_KEY_LOCATION: ${JWT_PRIVATE_KEY_LOCATION:-}
+      JWT_PUBLIC_KEY_LOCATION: ${JWT_PUBLIC_KEY_LOCATION:-}
+      JWT_ALLOW_EPHEMERAL_KEY: ${JWT_ALLOW_EPHEMERAL_KEY:-true}
+      AUTH_BCRYPT_STRENGTH: ${AUTH_BCRYPT_STRENGTH:-12}
+      OAUTH2_ENABLED: ${OAUTH2_ENABLED:-false}
+      AUTH_BOOTSTRAP_ADMIN_ENABLED: ${AUTH_BOOTSTRAP_ADMIN_ENABLED:-false}
+      AUTH_BOOTSTRAP_ADMIN_EMAIL: ${AUTH_BOOTSTRAP_ADMIN_EMAIL:-}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-}
     ports:
       - "8081:8081"
     depends_on:
@@ -285,6 +297,19 @@ services:
       <<: *service-environment
       SERVER_PORT: 8080
       AUTH_SERVICE_URL: http://auth-service:8081
+      AUTH_JWK_SET_URI: http://auth-service:8081/api/v1/auth/.well-known/jwks.json
+      JWT_ISSUER: ${JWT_ISSUER:-urn:event-platform:auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-event-platform-api}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      GATEWAY_ALLOWED_ORIGINS: ${GATEWAY_ALLOWED_ORIGINS:-http://localhost:3000}
+      GATEWAY_RATE_LIMIT_ENABLED: ${GATEWAY_RATE_LIMIT_ENABLED:-true}
+      REGISTRATION_RATE_REPLENISH: ${REGISTRATION_RATE_REPLENISH:-1}
+      REGISTRATION_RATE_BURST: ${REGISTRATION_RATE_BURST:-5}
+      LOGIN_RATE_REPLENISH: ${LOGIN_RATE_REPLENISH:-1}
+      LOGIN_RATE_BURST: ${LOGIN_RATE_BURST:-10}
+      REFRESH_RATE_REPLENISH: ${REFRESH_RATE_REPLENISH:-1}
+      REFRESH_RATE_BURST: ${REFRESH_RATE_BURST:-10}
       EVENT_SERVICE_URL: http://event-service:8082
       VENUE_SERVICE_URL: http://venue-service:8083
       ATTENDEE_SERVICE_URL: http://attendee-service:8084
@@ -304,6 +329,8 @@ services:
       payment-service:
         condition: service_healthy
       notification-service:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks: [platform]
 

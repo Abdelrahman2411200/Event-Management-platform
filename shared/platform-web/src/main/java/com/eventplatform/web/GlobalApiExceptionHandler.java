@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -44,7 +46,7 @@ public class GlobalApiExceptionHandler {
         return response(
                 HttpStatus.BAD_REQUEST,
                 "BAD_REQUEST",
-                exception.getMessage(),
+                "Request body or parameters are malformed",
                 request,
                 List.of());
     }
@@ -55,6 +57,26 @@ public class GlobalApiExceptionHandler {
                 HttpStatus.NOT_FOUND,
                 "RESOURCE_NOT_FOUND",
                 "The requested resource was not found",
+                request,
+                List.of());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.FORBIDDEN,
+                "ACCESS_DENIED",
+                "Access is denied",
+                request,
+                List.of());
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ApiError> handleAuthentication(AuthenticationException exception, HttpServletRequest request) {
+        return response(
+                HttpStatus.UNAUTHORIZED,
+                "AUTHENTICATION_REQUIRED",
+                "Authentication is required",
                 request,
                 List.of());
     }

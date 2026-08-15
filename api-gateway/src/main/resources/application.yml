@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   cloud:
     gateway:
       server:
@@ -13,6 +17,10 @@ spring:
               uri: ${AUTH_SERVICE_URL:http://localhost:8081}
               predicates:
                 - Path=/api/v1/auth/**
+            - id: auth-service-oauth2
+              uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+              predicates:
+                - Path=/oauth2/**,/login/oauth2/**
             - id: event-service
               uri: ${EVENT_SERVICE_URL:http://localhost:8082}
               predicates:
@@ -37,6 +45,24 @@ spring:
 platform:
   metadata:
     api-version: v1
+  gateway:
+    security:
+      allowed-origins: ${GATEWAY_ALLOWED_ORIGINS:http://localhost:3000}
+      jwt:
+        issuer: ${JWT_ISSUER:urn:event-platform:auth}
+        audience: ${JWT_AUDIENCE:event-platform-api}
+        jwk-set-uri: ${AUTH_JWK_SET_URI:http://localhost:8081/api/v1/auth/.well-known/jwks.json}
+      rate-limit:
+        enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
+        registration:
+          replenish-rate: ${REGISTRATION_RATE_REPLENISH:1}
+          burst-capacity: ${REGISTRATION_RATE_BURST:5}
+        login:
+          replenish-rate: ${LOGIN_RATE_REPLENISH:1}
+          burst-capacity: ${LOGIN_RATE_BURST:10}
+        refresh:
+          replenish-rate: ${REFRESH_RATE_REPLENISH:1}
+          burst-capacity: ${REFRESH_RATE_BURST:10}
 
 management:
   endpoints:
@@ -49,7 +75,7 @@ management:
         enabled: true
       group:
         readiness:
-          include: readinessState
+          include: readinessState,redis
         liveness:
           include: livenessState
   info:
@@ -65,7 +91,7 @@ management:
 info:
   app:
     name: ${spring.application.name}
-    description: Public API gateway skeleton
+    description: JWT-validating API gateway with explicit CORS, security headers, and Redis-backed authentication rate limits
     version: "@project.version@"
     api-version: v1
 

@@ -8,3 +8,4 @@ ADRs record decisions that constrain later implementation phases.
 | [0002](0002-database-per-service.md) | Database ownership by service | Accepted |
 | [0003](0003-saga-and-transactional-outbox.md) | Orchestrated Saga and transactional outbox | Accepted |
 | [0004](0004-api-versioning.md) | URI major-versioned public APIs | Accepted |
+| [0005](0005-token-and-session-security.md) | Signed access tokens and rotated opaque refresh sessions | Accepted |

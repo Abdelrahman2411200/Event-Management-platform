@@ -6,6 +6,12 @@ All public application routes use a URI major version: `/api/v1/<resource>`. Bac
 
 OpenAPI JSON is exposed by every service at `/v3/api-docs`, and Swagger UI is exposed at `/swagger-ui/index.html`. The API gateway documents its edge contract; service documents remain available on their local development ports.
 
+## Authentication and authorization
+
+Protected requests use `Authorization: Bearer <access-token>`. The gateway and every participating downstream service validate the JWT signature, issuer, audience, lifetime, and access-token type. The gateway forwards the original bearer token so downstream services can authenticate independently; it does not turn caller-controlled identity headers into authority.
+
+Public, authenticated, and admin-only auth routes are listed in [the security architecture](security.md). Roles are uppercase stable identifiers: `ATTENDEE`, `ORGANIZER`, `EVENT_STAFF`, and `ADMIN`. Authorization failures are `401` for missing or invalid authentication and `403` for an authenticated principal without authority. Bearer failures include `WWW-Authenticate: Bearer`.
+
 ## Standard error body
 
 Servlet services share only the domain-free error contract and handling utilities. The reactive gateway emits the same shape:
