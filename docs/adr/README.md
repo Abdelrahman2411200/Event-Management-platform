@@ -9,3 +9,4 @@ ADRs record decisions that constrain later implementation phases.
 | [0003](0003-saga-and-transactional-outbox.md) | Orchestrated Saga and transactional outbox | Accepted |
 | [0004](0004-api-versioning.md) | URI major-versioned public APIs | Accepted |
 | [0005](0005-token-and-session-security.md) | Signed access tokens and rotated opaque refresh sessions | Accepted |
+| [0006](0006-event-inventory-and-venue-assignment.md) | Locked inventory holds, venue API reservations, and event outbox | Accepted |

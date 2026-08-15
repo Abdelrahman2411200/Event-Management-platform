@@ -67,7 +67,7 @@ For local JVM experiments, supply registration properties through environment va
 
 ## Gateway controls
 
-- Public allowlist: registration, login, refresh, JWKS, OAuth callbacks, health/metrics, and API docs. Other `/api/v1/**` routes require a validated bearer token; everything else is denied.
+- Public allowlist: registration, login, refresh, JWKS, OAuth callbacks, published-event list/detail, active event categories, health/metrics, and API docs. Other `/api/v1/**` routes require a validated bearer token; everything else is denied.
 - CORS: exact configured origins only (default `http://localhost:3000`), explicit methods and headers, credentials enabled, and a standard `403 CORS_ORIGIN_DENIED` body for rejected origins. Wildcard origins are not used.
 - Identity spoofing: inbound `X-User-*` and `X-Authenticated-User-*` headers are removed. `Authorization`, `X-Correlation-Id`, `Idempotency-Key`, and trace propagation remain available to downstream boundaries.
 - Security headers: `Referrer-Policy: no-referrer`, restrictive camera/microphone/geolocation permissions, MIME sniffing disabled, and framing denied. TLS/HSTS belongs at HTTPS ingress; HSTS is intentionally not asserted by the local HTTP gateway.

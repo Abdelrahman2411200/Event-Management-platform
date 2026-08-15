@@ -54,6 +54,11 @@ class ApiGatewayApplicationTest {
                 .expectBody()
                 .jsonPath("$['paths']['/api/v1/auth/register']['post']").exists()
                 .jsonPath("$['paths']['/api/v1/auth/logout']['post']['security'][0]['bearerAuth']").isArray()
+                .jsonPath("$['paths']['/api/v1/events/{eventId}/transitions']['post']").exists()
+                .jsonPath("$['paths']['/api/v1/events/{eventId}/ticket-types/{ticketTypeId}/inventory/reservations']['post']['parameters'][2]['name']")
+                .isEqualTo("Idempotency-Key")
+                .jsonPath("$['paths']['/api/v1/venues/{venueId}/spaces/{spaceId}']['put']").exists()
+                .jsonPath("$['paths']['/api/v1/venues/{venueId}/availability-blocks']['post']").exists()
                 .jsonPath("$['components']['securitySchemes']['bearerAuth']['scheme']").isEqualTo("bearer");
     }
 

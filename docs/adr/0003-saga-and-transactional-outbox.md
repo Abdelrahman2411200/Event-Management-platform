@@ -15,4 +15,4 @@ Compensating commands and terminal failure states are part of the workflow contr
 
 ## Consequences
 
-Workflows become eventually consistent and require observable process state, timeouts, retry limits, and operator recovery paths. The system gains reliable publication and clear ownership at the cost of additional workflow and outbox storage. Phase 1 records the decision but creates no outbox or Saga tables before a real event contract exists.
+Workflows become eventually consistent and require observable process state, timeouts, retry limits, and operator recovery paths. The system gains reliable publication and clear ownership at the cost of additional workflow and outbox storage. Phase 1 recorded the decision, and Phase 3 adds the first concrete outbox for event lifecycle contracts. The booking/payment Saga and its process-state tables remain deferred until that workflow is implemented.
