@@ -1,0 +1,331 @@
+name: event-management-platform
+
+x-service-environment: &service-environment
+  KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+  OTEL_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+  TRACING_SAMPLING_PROBABILITY: "1.0"
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: platform_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-local_dev_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks: [platform]
+
+  redis:
+    image: redis:8.2.1-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [platform]
+
+  kafka:
+    image: apache/kafka:4.0.0
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:19092,PLAINTEXT_HOST://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,PLAINTEXT_HOST://localhost:${KAFKA_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:19092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks: [platform]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.68.0
+    profiles: [observability, full-stack]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_PORT:-16686}:16686"
+    networks: [platform]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.132.0
+    profiles: [observability, full-stack]
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    volumes:
+      - ./observability/otel-collector/config.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+    depends_on:
+      jaeger:
+        condition: service_started
+    networks: [platform]
+
+  loki:
+    image: grafana/loki:3.5.3
+    profiles: [observability, full-stack]
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    networks: [platform]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observability, full-stack]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks: [platform]
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: [observability, full-stack]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local_dev_only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_started
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks: [platform]
+
+  auth-service:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: auth-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8081
+      DATABASE_URL: jdbc:postgresql://postgres:5432/auth_service
+      DATABASE_USERNAME: auth_service
+      DATABASE_PASSWORD: local_dev_only
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [platform]
+
+  event-service:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: event-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8082
+      DATABASE_URL: jdbc:postgresql://postgres:5432/event_service
+      DATABASE_USERNAME: event_service
+      DATABASE_PASSWORD: local_dev_only
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [platform]
+
+  venue-service:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: venue-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8083
+      DATABASE_URL: jdbc:postgresql://postgres:5432/venue_service
+      DATABASE_USERNAME: venue_service
+      DATABASE_PASSWORD: local_dev_only
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [platform]
+
+  attendee-service:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: attendee-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8084
+      DATABASE_URL: jdbc:postgresql://postgres:5432/attendee_service
+      DATABASE_USERNAME: attendee_service
+      DATABASE_PASSWORD: local_dev_only
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [platform]
+
+  payment-service:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: payment-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8085
+      DATABASE_URL: jdbc:postgresql://postgres:5432/payment_service
+      DATABASE_USERNAME: payment_service
+      DATABASE_PASSWORD: local_dev_only
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [platform]
+
+  notification-service:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: notification-service
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8086
+      DATABASE_URL: jdbc:postgresql://postgres:5432/notification_service
+      DATABASE_USERNAME: notification_service
+      DATABASE_PASSWORD: local_dev_only
+    ports:
+      - "8086:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks: [platform]
+
+  api-gateway:
+    profiles: [full-stack]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        MODULE: api-gateway
+    environment:
+      <<: *service-environment
+      SERVER_PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8081
+      EVENT_SERVICE_URL: http://event-service:8082
+      VENUE_SERVICE_URL: http://venue-service:8083
+      ATTENDEE_SERVICE_URL: http://attendee-service:8084
+      PAYMENT_SERVICE_URL: http://payment-service:8085
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      event-service:
+        condition: service_healthy
+      venue-service:
+        condition: service_healthy
+      attendee-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    networks: [platform]
+
+  frontend:
+    profiles: [full-stack]
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks: [platform]
+
+networks:
+  platform:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:

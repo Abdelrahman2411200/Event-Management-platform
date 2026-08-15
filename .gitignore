@@ -1,0 +1,22 @@
+# Build output
+target/
+**/target/
+node_modules/
+frontend/dist/
+frontend/.npm-cache/
+
+# Local configuration
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Workspace automation output
+.github/modernize/
