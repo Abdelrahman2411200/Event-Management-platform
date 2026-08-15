@@ -1,0 +1,1 @@
+-- Phase 1 baseline. Domain tables are introduced with the attendee feature phase.
