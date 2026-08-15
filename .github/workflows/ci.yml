@@ -43,7 +43,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       - name: Audit production and development dependencies
         working-directory: frontend

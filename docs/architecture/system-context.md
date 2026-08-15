@@ -65,7 +65,7 @@ Every network call has a timeout. Retries are allowed only for operations known 
 
 ## Data ownership
 
-- Each domain service has one PostgreSQL database and one database user locally.
+- Each domain service has one PostgreSQL database and one database user locally. PostgreSQL `CONNECT` privileges are revoked from `PUBLIC` for service databases and granted only to the owning login.
 - Only the owning service runs Flyway migrations against its database.
 - A service never queries, maps, or writes another service's tables.
 - Redis may later hold caches, rate-limit state, sessions, or short-lived coordination data, but never replaces an owning service's durable source of truth.

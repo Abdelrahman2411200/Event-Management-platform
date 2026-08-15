@@ -51,6 +51,7 @@ public class PlatformWebAutoConfiguration {
                         .requestMatchers(
                                 "/actuator/health/**",
                                 "/actuator/info",
+                                "/actuator/prometheus",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html")
@@ -58,6 +59,13 @@ public class PlatformWebAutoConfiguration {
                         .anyRequest()
                         .denyAll())
                 .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) -> errorWriter.write(
+                                request,
+                                response,
+                                HttpStatus.UNAUTHORIZED.value(),
+                                HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+                                "AUTHENTICATION_REQUIRED",
+                                "Authentication is required"))
                         .accessDeniedHandler((request, response, exception) -> errorWriter.write(
                                 request,
                                 response,
