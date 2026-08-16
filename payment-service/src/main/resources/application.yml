@@ -17,11 +17,35 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:payment-service-v1}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
 platform:
   metadata:
-    description: Payment integration boundary; business capabilities are deferred
+    description: Provider-neutral payment, refund, webhook, and reconciliation service
     version: ${APP_VERSION:@project.version@}
     api-version: v1
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:urn:event-platform:auth}
+      audience: ${JWT_AUDIENCE:event-platform-api}
+      jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8081/api/v1/auth/.well-known/jwks.json}
+  payment:
+    provider: ${PAYMENT_PROVIDER:fake}
+    webhook-secret: ${PAYMENT_WEBHOOK_SECRET:}
+    processing-timeout: ${PAYMENT_PROCESSING_TIMEOUT:30s}
+    reconciliation-delay: ${PAYMENT_RECONCILIATION_DELAY:10s}
+  integration-events:
+    enabled: ${INTEGRATION_EVENTS_ENABLED:true}
+    attendee-topic: ${ATTENDEE_EVENTS_TOPIC:event-platform.attendee-lifecycle.v1}
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+    topic: ${PAYMENT_EVENTS_TOPIC:event-platform.payment-lifecycle.v1}
+    batch-size: ${OUTBOX_BATCH_SIZE:50}
+    publish-interval: ${OUTBOX_PUBLISH_INTERVAL:1s}
 management:
   endpoints:
     web:

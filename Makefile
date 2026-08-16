@@ -1,10 +1,13 @@
-.PHONY: build test frontend-install frontend-lint frontend-typecheck frontend-build frontend-check infra-up infra-down observability-up full-stack down logs
+.PHONY: build test phase5-test frontend-install frontend-lint frontend-typecheck frontend-build frontend-check infra-up infra-down observability-up full-stack down logs
 
 build:
 	mvn clean verify
 
 test:
 	mvn test
+
+phase5-test:
+	mvn -pl event-service,attendee-service,payment-service,api-gateway -am test
 
 frontend-install:
 	npm --prefix frontend ci

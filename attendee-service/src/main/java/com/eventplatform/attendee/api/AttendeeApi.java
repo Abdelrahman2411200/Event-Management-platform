@@ -1,6 +1,7 @@
 package com.eventplatform.attendee.api;
 
 import com.eventplatform.attendee.domain.BookingStatus;
+import com.eventplatform.attendee.domain.BookingSagaState;
 import com.eventplatform.attendee.domain.RegistrationStatus;
 import com.eventplatform.attendee.domain.ScanOutcome;
 import com.eventplatform.attendee.domain.TicketHoldStatus;
@@ -58,8 +59,13 @@ public final class AttendeeApi {
             UUID id, UUID attendeeId, UUID registrationId, UUID eventId,
             RegistrationStatus registrationStatus, BookingStatus status,
             BigDecimal totalAmount, String currency, Instant holdExpiresAt,
-            List<BookingLineItemResponse> lineItems, TicketHoldResponse hold,
+            SagaResponse saga, List<BookingLineItemResponse> lineItems, TicketHoldResponse hold,
             List<TicketResponse> tickets, Instant createdAt, Instant updatedAt) {
+    }
+
+    public record SagaResponse(
+            UUID paymentId, BookingSagaState state, String failureCode,
+            String failureReason, int recoveryAttempts, Instant nextActionAt) {
     }
 
     public record TicketListResponse(List<TicketResponse> tickets) {

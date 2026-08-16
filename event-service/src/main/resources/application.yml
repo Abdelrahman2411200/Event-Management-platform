@@ -39,6 +39,9 @@ platform:
   inventory:
     hold-ttl: ${INVENTORY_HOLD_TTL:15m}
     expiry-enabled: ${INVENTORY_EXPIRY_ENABLED:true}
+  integration-events:
+    enabled: ${EVENT_SAGA_CONSUMER_ENABLED:true}
+    attendee-topic: ${ATTENDEE_LIFECYCLE_TOPIC:event-platform.attendee-lifecycle.v1}
   outbox:
     enabled: ${EVENT_OUTBOX_ENABLED:true}
     topic: ${EVENT_LIFECYCLE_TOPIC:event-platform.event-lifecycle.v1}

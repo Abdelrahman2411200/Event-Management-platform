@@ -1,6 +1,6 @@
 # Event Management Platform
 
-A local-first, cloud-ready microservices platform built with Spring Boot and React. Phase 4 adds attendee profiles, durable idempotent booking commands, inventory-backed ticket holds, zero-price ticket issuance, signed QR tickets, and concurrency-safe check-in. Provider-backed payment, notification delivery, and waitlisting remain intentionally deferred.
+A local-first, cloud-ready microservices platform built with Spring Boot and React. Phase 5 adds provider-neutral payments/refunds, signed and deduplicated webhooks, transaction history, reconciliation, and a recoverable Kafka/outbox booking-payment Saga. Notification delivery and waitlisting remain intentionally deferred.
 
 ## Technology baseline
 
@@ -22,7 +22,7 @@ Kubernetes, Helm, Terraform, AWS, external OAuth providers, and cloud-managed se
 |-- event-service/            # Events, categories, ticket products, inventory, outbox
 |-- venue-service/            # Venues, rooms, location metadata, availability
 |-- attendee-service/         # Profiles, bookings, holds, tickets, QR scans, outbox
-|-- payment-service/          # Phase 1 boundary skeleton
+|-- payment-service/          # Payments, attempts, transactions, refunds, webhooks, outbox
 |-- notification-service/     # Phase 1 boundary skeleton
 |-- frontend/                 # React + TypeScript + Tailwind shell
 |-- shared/                   # Narrow, domain-free technical contracts and web baseline
@@ -45,7 +45,7 @@ Each service owns its data. Shared modules contain no business entities, reposit
 
 Confirm the toolchain with `mvn -version`. Maven reports the Java runtime it actually uses; this is authoritative even if a separate shell cannot initially find `java` on `PATH`.
 
-For the installed Temurin 25 distribution on Windows, validate Phase 4 in the current PowerShell session with:
+For the installed Temurin 25 distribution on Windows, validate Phase 5 in the current PowerShell session with:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-25.0.4.7-hotspot'
@@ -68,10 +68,10 @@ npm --prefix frontend run build
 docker compose --profile full-stack config --quiet
 ```
 
-Focused Phase 4 backend tests under the current JDK:
+Focused Phase 5 backend tests under the current JDK:
 
 ```bash
-mvn -pl event-service,attendee-service,api-gateway -am test
+mvn -pl event-service,attendee-service,payment-service,api-gateway -am test
 ```
 
 Equivalent root targets include `make build`, `make test`, `make frontend-check`, `make infra-up`, `make infra-down`, `make full-stack`, and `make down`.
@@ -96,7 +96,7 @@ The second command preserves volumes. Adding `--volumes` permanently removes Com
 
 Copy `.env.example` to an uncommitted `.env` only when overriding local defaults. The default auth service generates an ephemeral 2048-bit RSA key so no secret is required locally; all access tokens become invalid when that service restarts. Persistent signing keys, OAuth credentials, and bootstrap-admin credentials must be supplied privately through environment/configuration and must never be committed. See [authentication and gateway security](docs/architecture/security.md).
 
-Phase 4 local defaults use 15-minute event inventory holds, a 30-second attendee expiry sweep, and Kafka topics for event and attendee lifecycle records. Local QR signing may use an ephemeral key; inject at least 32 private bytes and disable ephemeral fallback anywhere tickets must survive a restart. These settings are documented in `.env.example`; no cloud account or external provider is required.
+Phase 5 local defaults use 15-minute inventory holds, the deterministic fake payment provider, signed fake webhooks, payment reconciliation, and Kafka topics for event, attendee, and payment lifecycle records. Local QR signing may use an ephemeral key; inject at least 32 private bytes and disable ephemeral fallback anywhere tickets must survive a restart. These settings are documented in `.env.example`; no cloud account, external provider, or provider credential is required.
 
 ## Authentication quick start
 
@@ -173,7 +173,19 @@ See the [Phase 3 architecture, state diagram, contracts, and complete example re
 | Scanning | `POST /api/v1/tickets/validate`; `POST /api/v1/check-ins` | Staff/organizer/admin validation and exactly-once check-in |
 | Event inventory | Existing reserve/release plus `POST .../reservations/{id}/confirm` | Database-authoritative hold lifecycle |
 
-Priced bookings stop at `PAYMENT_PENDING` and issue no ticket. Zero-price bookings confirm their event-service reservation and issue signed, PII-free QR tickets. Every POST requires `Idempotency-Key`. See the [Phase 4 architecture, concurrency rules, QR contract, and example](docs/architecture/phase-4-attendee-booking-ticketing.md).
+Phase 4 creates priced bookings at `PAYMENT_PENDING`; Phase 5 now advances them through payment and inventory confirmation. Zero-price bookings continue to confirm immediately and issue signed, PII-free QR tickets. Client mutation requests require `Idempotency-Key`. See the [Phase 4 architecture, concurrency rules, QR contract, and example](docs/architecture/phase-4-attendee-booking-ticketing.md).
+
+## Phase 5 API surface
+
+| Boundary | Paths | Behavior |
+| --- | --- | --- |
+| Payments | `POST`, `GET /api/v1/payments`; `GET /api/v1/payments/{id}` | Booking-projected amount/currency, opaque provider token, durable idempotency |
+| History/reconciliation | `GET .../{id}/transactions`; `POST .../{id}/verify` | Immutable attempt/refund history and authoritative provider verification |
+| Refunds | `POST /api/v1/payments/{id}/refunds` | Attendee full remaining refund; organizer/admin full or partial eligible-ticket refund |
+| Webhooks | `POST /api/v1/payments/webhooks/{provider}` | Public transport route with mandatory provider signature and event-ID deduplication |
+| Booking Saga | Kafka lifecycle topics and booking `saga` response | Payment success commits inventory before tickets; expiry/rejection compensates by refund |
+
+The local fake provider accepts `sandbox-success`, `sandbox-success-refund-fail-once`, `sandbox-failure`, `sandbox-processing`, `sandbox-processing-then-success`, and `sandbox-processing-then-failure`. Payment tokens and raw webhook bodies are never persisted. See the [Phase 5 architecture and event contracts](docs/architecture/phase-5-payment-refund-saga.md) and [operational recovery guide](docs/operations/payment-saga-recovery.md).
 
 ## Local endpoints
 
@@ -197,9 +209,9 @@ Priced bookings stop at `PAYMENT_PENDING` and issue no ticket. Zero-price bookin
 - API failures share `timestamp`, `status`, `error`, `code`, `message`, `path`, `correlationId`, and optional `validationDetails`.
 - `X-Correlation-Id` is validated/generated at the gateway, forwarded downstream, returned, and included in logging context. W3C trace context remains independent.
 - The gateway validates JWTs before forwarding protected routes, removes untrusted identity headers, preserves the original bearer token, enforces explicit-origin CORS, applies security headers, and rate-limits authentication endpoints through Redis.
-- Event-service, venue-service, and attendee-service independently validate the JWT and enforce role plus ownership rules; the gateway is not their sole authorization boundary. Other domain services continue to deny unimplemented application routes.
-- Kafka remains the only message broker. Event and attendee lifecycle changes publish through service-owned transactional outboxes; no code performs an ad-hoc database/Kafka dual write.
+- Event-service, venue-service, attendee-service, and payment-service independently validate the JWT and enforce role plus ownership rules; the gateway is not their sole authorization boundary.
+- Kafka remains the only message broker. Event, attendee, and payment lifecycle changes publish through service-owned transactional outboxes; no code performs an ad-hoc database/Kafka dual write.
 
-Completed through Phase 4: the Phase 1 platform foundation; Phase 2 authentication and gateway security; Phase 3 venues, events, ticket products, and inventory; and Phase 4 attendee profiles, registrations, booking/hold process state, zero-price ticket issuance, QR validation, check-in, and attendee lifecycle outbox. Payment providers, paid-booking completion/refunds, notification delivery, waitlisting, object storage, and deployment remain deferred.
+Completed through Phase 5: the platform foundation; authentication and gateway security; venues, events, ticket products, and inventory; attendee booking/ticket/check-in; and provider-neutral payments, paid-booking confirmation, refunds, webhooks, reconciliation, compensation, and Saga recovery. Real payment-provider credentials/adapters, notification delivery, waitlisting, object storage, and deployment remain deferred.
 
 See [system context](docs/architecture/system-context.md), [API conventions](docs/architecture/api-conventions.md), [security architecture](docs/architecture/security.md), and the [ADR index](docs/adr/README.md).

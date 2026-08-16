@@ -83,6 +83,10 @@ Only `ADMIN` may query the most recent audit events; the requested limit is boun
 
 All controlled gateway/auth failures use the shared API error contract. JSON parsing details, stack traces, token material, SQL, provider payloads, and secrets are not returned. `401` bearer failures include `WWW-Authenticate: Bearer`, and correlation IDs are returned on success and failure paths.
 
+## Payment and webhook boundary
+
+Payment-service binds payment creation to the booking attendee snapshot and restricts refund reads/actions to the attendee, owning organizer, or admin policy. The gateway and payment-service leave `/api/v1/payments/webhooks/{provider}` without bearer authentication because a provider cannot obtain a user JWT; payment-service instead requires the adapter's cryptographic webhook signature and deduplicates provider event IDs. A browser callback is never proof of payment. Raw card/CVV data, payment method tokens, provider secrets, and raw webhook payloads are not persisted or logged.
+
 ## Configuration reference
 
 | Setting | Default | Purpose |

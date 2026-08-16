@@ -129,6 +129,19 @@ public class OpenApiConfiguration {
                 .post(idempotent(operation("Validate a signed QR ticket", "200", true, "Check-in"))));
         paths.addPathItem("/api/v1/check-ins", new PathItem()
                 .post(idempotent(operation("Check in an issued ticket once", "201", true, "Check-in"))));
+        paths.addPathItem("/api/v1/payments", new PathItem()
+                .get(operation("List payments owned by the attendee", "200", true, "Payments"))
+                .post(idempotent(operation("Create or retry a provider-neutral payment", "200", true, "Payments"))));
+        paths.addPathItem("/api/v1/payments/{paymentId}", new PathItem()
+                .get(pathParameters(operation("Read an authorized payment", "200", true, "Payments"), "paymentId")));
+        paths.addPathItem("/api/v1/payments/{paymentId}/verify", new PathItem()
+                .post(pathParameters(operation("Reconcile payment status with its provider", "200", true, "Payments"), "paymentId")));
+        paths.addPathItem("/api/v1/payments/{paymentId}/transactions", new PathItem()
+                .get(pathParameters(operation("Read immutable payment and refund transaction history", "200", true, "Payments"), "paymentId")));
+        paths.addPathItem("/api/v1/payments/{paymentId}/refunds", new PathItem()
+                .post(idempotent(pathParameters(operation("Request an authorized full or partial refund", "200", true, "Refunds"), "paymentId"))));
+        paths.addPathItem("/api/v1/payments/webhooks/{provider}", new PathItem()
+                .post(pathParameters(operation("Consume a provider-signed webhook", "200", false, "Payment webhooks"), "provider")));
         return paths;
     }
 

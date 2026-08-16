@@ -9,3 +9,16 @@ spring:
 management:
   tracing:
     enabled: false
+platform:
+  integration-events:
+    enabled: false
+  payment:
+    reconciliation-enabled: false
+    webhook-secret: test-webhook-secret
+  outbox:
+    enabled: false
+  security:
+    jwt:
+      issuer: urn:event-platform:auth
+      audience: event-platform-api
+      jwk-set-uri: http://localhost:0/jwks

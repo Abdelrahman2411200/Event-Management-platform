@@ -46,6 +46,8 @@ public class GatewaySecurityConfiguration {
                                 "/oauth2/**",
                                 "/login/oauth2/**")
                         .permitAll()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/**")
+                        .permitAll()
                         .pathMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/events",

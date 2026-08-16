@@ -13,20 +13,20 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(name = "platform.holds.expiry-enabled", havingValue = "true", matchIfMissing = true)
 public class TicketHoldExpiryJob {
     private final TicketHoldRepository holdRepository;
-    private final BookingPersistenceService persistenceService;
+    private final BookingSagaService sagaService;
     private final Clock clock;
 
     public TicketHoldExpiryJob(
-            TicketHoldRepository holdRepository, BookingPersistenceService persistenceService, Clock clock) {
+            TicketHoldRepository holdRepository, BookingSagaService sagaService, Clock clock) {
         this.holdRepository = holdRepository;
-        this.persistenceService = persistenceService;
+        this.sagaService = sagaService;
         this.clock = clock;
     }
 
     @Scheduled(fixedDelayString = "${platform.holds.expiry-interval:30s}")
     public void expireHolds() {
         for (UUID holdId : holdRepository.findExpiredIds(clock.instant(), PageRequest.of(0, 100))) {
-            persistenceService.expireByHoldId(holdId, RequestContext.system("ticket-hold-expiry", holdId.toString()));
+            sagaService.holdExpired(holdId, RequestContext.system("ticket-hold-expiry", holdId.toString()));
         }
     }
 }

@@ -71,19 +71,21 @@ public class QrTokenService {
             throw new QrVerificationException(ScanOutcome.INVALID_TOKEN);
         }
         try {
-            byte[] supplied = DECODER.decode(segments[2]);
+            byte[] decodedHeader = canonicalDecode(segments[0]);
+            byte[] decodedPayload = canonicalDecode(segments[1]);
+            byte[] supplied = canonicalDecode(segments[2]);
             byte[] expected = sign(segments[0] + "." + segments[1]);
             if (!MessageDigest.isEqual(expected, supplied)) {
                 throw new QrVerificationException(ScanOutcome.TAMPERED_TOKEN);
             }
             @SuppressWarnings("unchecked")
-            Map<String, Object> header = objectMapper.readValue(DECODER.decode(segments[0]), Map.class);
+            Map<String, Object> header = objectMapper.readValue(decodedHeader, Map.class);
             if (!"HS256".equals(header.get("alg"))
                     || !"ETP-QR".equals(header.get("typ"))
                     || !Integer.valueOf(1).equals(header.get("v"))) {
                 throw new QrVerificationException(ScanOutcome.INVALID_TOKEN);
             }
-            QrPayload payload = objectMapper.readValue(DECODER.decode(segments[1]), QrPayload.class);
+            QrPayload payload = objectMapper.readValue(decodedPayload, QrPayload.class);
             if (!issuer.equals(payload.iss()) || payload.ticketId() == null || payload.eventId() == null
                     || payload.tokenVersion() < 1 || payload.issuedAt() == null) {
                 throw new QrVerificationException(ScanOutcome.INVALID_TOKEN);
@@ -94,6 +96,14 @@ public class QrTokenService {
         } catch (Exception exception) {
             throw new QrVerificationException(ScanOutcome.INVALID_TOKEN);
         }
+    }
+
+    private byte[] canonicalDecode(String segment) {
+        byte[] decoded = DECODER.decode(segment);
+        if (!ENCODER.encodeToString(decoded).equals(segment)) {
+            throw new QrVerificationException(ScanOutcome.TAMPERED_TOKEN);
+        }
+        return decoded;
     }
 
     public String fingerprint(String token) {

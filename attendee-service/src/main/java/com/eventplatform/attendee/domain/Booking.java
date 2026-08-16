@@ -64,6 +64,11 @@ public class Booking {
     }
 
     public void paymentPending(Instant now) { transition(BookingStatus.PAYMENT_PENDING, now); }
+    public void paymentProcessing(Instant now) { transition(BookingStatus.PAYMENT_PROCESSING, now); }
+    public void confirmationPending(Instant now) { transition(BookingStatus.CONFIRMATION_PENDING, now); }
+    public void paymentFailed(Instant now) { transition(BookingStatus.PAYMENT_FAILED, now); }
+    public void compensationPending(Instant now) { transition(BookingStatus.COMPENSATION_PENDING, now); }
+    public void partiallyRefunded(Instant now) { transition(BookingStatus.PARTIALLY_REFUNDED, now); }
     public void confirm(Instant now) { transition(BookingStatus.CONFIRMED, now); }
     public void expire(Instant now) { transition(BookingStatus.EXPIRED, now); }
     public void cancel(Instant now) { transition(BookingStatus.CANCELLED, now); }

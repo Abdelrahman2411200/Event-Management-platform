@@ -119,6 +119,33 @@ class InventoryHoldLifecycleIntegrationTest {
         assertThat(reserveReplay.status()).isEqualTo(InventoryReservationStatus.CONFIRMED);
     }
 
+    @Test
+    void sagaConfirmationIsIdempotentAndExpiredHoldProducesCompensatableRejection() {
+        Fixture fixture = fixture();
+        EventApi.InventoryReservationResponse held = inventoryService.reserve(
+                fixture.eventId(), fixture.ticketTypeId(), 1, "saga-confirm-reserve", ATTENDEE, CONTEXT);
+        UUID bookingId = UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
+        inventoryService.confirmSaga(bookingId, paymentId, ATTENDEE.userId(), fixture.eventId(),
+                fixture.ticketTypeId(), held.id(), "confirm:" + bookingId, CONTEXT);
+        inventoryService.confirmSaga(bookingId, paymentId, ATTENDEE.userId(), fixture.eventId(),
+                fixture.ticketTypeId(), held.id(), "confirm:" + bookingId, CONTEXT);
+        assertThat(reservationRepository.findById(held.id()).orElseThrow().getStatus())
+                .isEqualTo(InventoryReservationStatus.CONFIRMED);
+
+        setUp();
+        fixture = fixture();
+        held = inventoryService.reserve(
+                fixture.eventId(), fixture.ticketTypeId(), 1, "saga-expired-reserve", ATTENDEE, CONTEXT);
+        when(clock.instant()).thenReturn(held.expiresAt().plusSeconds(1));
+        inventoryService.confirmSaga(UUID.randomUUID(), UUID.randomUUID(), ATTENDEE.userId(),
+                fixture.eventId(), fixture.ticketTypeId(), held.id(), "confirm:expired", CONTEXT);
+        assertThat(outboxRepository.findAll()).extracting(
+                com.eventplatform.event.outbox.OutboxMessage::getEventType)
+                .contains("event-platform.inventory.expired.v1",
+                        "event-platform.inventory.confirmation-rejected.v1");
+    }
+
     private Fixture fixture() {
         EventApi.CategoryResponse category = categoryService.create(
                 new EventApi.CategoryRequest("phase-four", "Phase Four", null));

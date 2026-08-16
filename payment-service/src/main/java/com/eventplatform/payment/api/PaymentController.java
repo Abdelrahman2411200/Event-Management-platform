@@ -1,0 +1,18 @@
+package com.eventplatform.payment.api;
+
+import com.eventplatform.payment.application.*; import com.eventplatform.payment.domain.*; import com.eventplatform.payment.security.AuthenticatedActor; import jakarta.servlet.http.HttpServletRequest; import jakarta.validation.Valid; import java.util.*;
+import org.springframework.http.*; import org.springframework.security.core.Authentication; import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+
+@RestController @RequestMapping("/api/v1/payments")
+public class PaymentController {
+ private final PaymentApplicationService application; private final PaymentQueryService query; private final RefundApplicationService refunds; private final PaymentWebhookService webhooks;
+ public PaymentController(PaymentApplicationService application,PaymentQueryService query,RefundApplicationService refunds,PaymentWebhookService webhooks){this.application=application;this.query=query;this.refunds=refunds;this.webhooks=webhooks;}
+ @PostMapping public ResponseEntity<PaymentApi.PaymentResponse> create(@RequestHeader("Idempotency-Key") String key,@Valid @RequestBody PaymentApi.CreatePaymentRequest body,Authentication authentication,HttpServletRequest request){AuthenticatedActor actor=AuthenticatedActor.from(authentication);if(!actor.hasRole("ATTENDEE"))throw new PaymentApiException(HttpStatus.FORBIDDEN,"ATTENDEE_ROLE_REQUIRED","Only an attendee may start a booking payment");Payment p=application.process(body.bookingId(),actor.id(),key,body.paymentMethodToken(),RequestContext.from(request));return ResponseEntity.status(p.getStatus()==PaymentStatus.PROCESSING?HttpStatus.ACCEPTED:HttpStatus.OK).body(query.map(p));}
+ @GetMapping public List<PaymentApi.PaymentResponse> list(Authentication authentication){return query.list(AuthenticatedActor.from(authentication));}
+ @GetMapping("/{id}") public PaymentApi.PaymentResponse get(@PathVariable UUID id,Authentication authentication){return query.get(id,AuthenticatedActor.from(authentication));}
+ @GetMapping("/{id}/transactions") public List<PaymentApi.TransactionResponse> history(@PathVariable UUID id,Authentication authentication){return query.history(id,AuthenticatedActor.from(authentication));}
+ @PostMapping("/{id}/verify") public PaymentApi.PaymentResponse verify(@PathVariable UUID id,Authentication authentication,HttpServletRequest request){AuthenticatedActor actor=AuthenticatedActor.from(authentication);Payment p=query.required(id,actor);return query.map(application.verify(p,RequestContext.from(request)));}
+ @PostMapping("/{id}/refunds") public PaymentApi.RefundResponse refund(@PathVariable UUID id,@RequestHeader("Idempotency-Key") String key,@RequestBody(required=false) PaymentApi.RefundRequest body,Authentication authentication,HttpServletRequest request){AuthenticatedActor actor=AuthenticatedActor.from(authentication);Refund r=refunds.refund(id,actor,key,body==null?List.of():body.ticketIds(),body==null?null:body.reason(),RequestContext.from(request));return new PaymentApi.RefundResponse(r.getId(),r.getAmount(),r.getCurrency(),r.ticketIds(),r.getStatus(),r.getProviderRefundId(),r.getFailureCode(),r.getFailureReason(),r.getCreatedAt(),r.getUpdatedAt());}
+ @SecurityRequirements @PostMapping(value="/webhooks/{provider}",consumes=MediaType.APPLICATION_JSON_VALUE) public PaymentApi.WebhookResponse webhook(@PathVariable String provider,@RequestHeader(name="X-Payment-Signature",required=false) String signature,@RequestBody String payload,HttpServletRequest request){boolean processed=webhooks.consume(provider,payload,signature,RequestContext.from(request));return new PaymentApi.WebhookResponse(processed?"PROCESSED":"DUPLICATE");}
+}
