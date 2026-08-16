@@ -18,6 +18,8 @@ public final class EventLifecycleEvents {
     public static final String INVENTORY_CONFIRMED = "event-platform.inventory.confirmed.v1";
     public static final String INVENTORY_RELEASED = "event-platform.inventory.released.v1";
     public static final String INVENTORY_EXPIRED = "event-platform.inventory.expired.v1";
+    public static final String INVENTORY_CONFIRMATION_REJECTED = "event-platform.inventory.confirmation-rejected.v1";
+    public static final String INVENTORY_RELEASE_REJECTED = "event-platform.inventory.release-rejected.v1";
 
     private EventLifecycleEvents() {
     }
@@ -77,5 +79,11 @@ public final class EventLifecycleEvents {
             InventoryReservationStatus status,
             Instant expiresAt,
             Instant occurredAt) {
+    }
+
+    public record InventorySagaRejectedV1(
+            UUID bookingId, UUID paymentId, UUID reservationId, UUID eventId,
+            UUID ticketTypeId, String commandKey, String failureCode,
+            String failureReason, Instant occurredAt) {
     }
 }

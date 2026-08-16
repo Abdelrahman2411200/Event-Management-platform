@@ -306,6 +306,52 @@ public class InventoryService {
         }
     }
 
+    @Transactional
+    public void confirmSaga(
+            UUID bookingId, UUID paymentId, UUID attendeeId, UUID eventId,
+            UUID ticketTypeId, UUID reservationId, String commandKey, RequestContext context) {
+        try {
+            InventoryReservation existing = reservationRepository.findById(reservationId).orElse(null);
+            if (existing != null
+                    && existing.getStatus() == InventoryReservationStatus.CONFIRMED
+                    && commandKey.equals(existing.getConfirmationIdempotencyKey())) {
+                appendInventoryEvent(EventLifecycleEvents.INVENTORY_CONFIRMED, existing, context, clock.instant());
+                return;
+            }
+            confirm(eventId, ticketTypeId, reservationId, commandKey,
+                    new AuthenticatedActor(attendeeId, java.util.Set.of()), context);
+        } catch (EventApiException exception) {
+            appendSagaRejection(EventLifecycleEvents.INVENTORY_CONFIRMATION_REJECTED,
+                    bookingId, paymentId, reservationId, eventId, ticketTypeId, commandKey,
+                    exception.getCode(), exception.getMessage(), context);
+        }
+    }
+
+    @Transactional
+    public void releaseSaga(
+            UUID bookingId, UUID paymentId, UUID attendeeId, UUID eventId,
+            UUID ticketTypeId, UUID reservationId, String commandKey, RequestContext context) {
+        try {
+            release(eventId, ticketTypeId, reservationId, commandKey,
+                    new AuthenticatedActor(attendeeId, java.util.Set.of()), context);
+        } catch (EventApiException exception) {
+            appendSagaRejection(EventLifecycleEvents.INVENTORY_RELEASE_REJECTED,
+                    bookingId, paymentId, reservationId, eventId, ticketTypeId, commandKey,
+                    exception.getCode(), exception.getMessage(), context);
+        }
+    }
+
+    private void appendSagaRejection(
+            String eventType, UUID bookingId, UUID paymentId, UUID reservationId,
+            UUID eventId, UUID ticketTypeId, String commandKey, String code,
+            String reason, RequestContext context) {
+        Instant now = clock.instant();
+        outbox.append("InventoryReservation", reservationId, eventType, EventLifecycleEvents.VERSION,
+                new EventLifecycleEvents.InventorySagaRejectedV1(
+                        bookingId, paymentId, reservationId, eventId, ticketTypeId,
+                        commandKey, code, reason, now), context, now);
+    }
+
     private boolean expireForTicket(TicketType ticket, Instant now) {
         List<InventoryReservation> expired = reservationRepository.findExpiredActive(ticket.getId(), now);
         for (InventoryReservation reservation : expired) {

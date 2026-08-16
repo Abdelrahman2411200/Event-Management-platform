@@ -2,6 +2,7 @@ package com.eventplatform.attendee.integration;
 
 import com.eventplatform.attendee.api.RequestContext;
 import com.eventplatform.attendee.application.BookingPersistenceService;
+import com.eventplatform.attendee.application.BookingSagaService;
 import com.eventplatform.contracts.CorrelationIds;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,19 +20,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class EventLifecycleConsumer {
     private static final String INVENTORY_EXPIRED = "event-platform.inventory.expired.v1";
     private static final String EVENT_CANCELLED = "event-platform.event.cancelled.v1";
+    private static final String INVENTORY_CONFIRMED = "event-platform.inventory.confirmed.v1";
+    private static final String INVENTORY_CONFIRMATION_REJECTED = "event-platform.inventory.confirmation-rejected.v1";
 
     private final ProcessedIntegrationEventRepository processedRepository;
     private final BookingPersistenceService persistenceService;
+    private final BookingSagaService sagaService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public EventLifecycleConsumer(
             ProcessedIntegrationEventRepository processedRepository,
             BookingPersistenceService persistenceService,
+            BookingSagaService sagaService,
             ObjectMapper objectMapper,
             Clock clock) {
         this.processedRepository = processedRepository;
         this.persistenceService = persistenceService;
+        this.sagaService = sagaService;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -54,7 +60,14 @@ public class EventLifecycleConsumer {
                 traceparent,
                 null);
         if (INVENTORY_EXPIRED.equals(eventType)) {
-            persistenceService.expireByReservation(UUID.fromString(body.required("reservationId").asText()), context);
+            sagaService.inventoryUnavailable(UUID.fromString(body.required("reservationId").asText()),
+                    "INVENTORY_HOLD_EXPIRED", "The inventory hold expired", context);
+        } else if (INVENTORY_CONFIRMED.equals(eventType)) {
+            sagaService.inventoryConfirmed(UUID.fromString(body.required("reservationId").asText()), context);
+        } else if (INVENTORY_CONFIRMATION_REJECTED.equals(eventType)) {
+            sagaService.inventoryUnavailable(UUID.fromString(body.required("reservationId").asText()),
+                    body.path("failureCode").asText("INVENTORY_CONFIRMATION_REJECTED"),
+                    body.path("failureReason").asText("Inventory confirmation was rejected"), context);
         } else if (EVENT_CANCELLED.equals(eventType)) {
             persistenceService.cancelEvent(UUID.fromString(body.required("eventId").asText()), context);
         }

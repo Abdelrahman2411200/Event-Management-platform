@@ -40,6 +40,9 @@ platform:
   integration-events:
     enabled: ${ATTENDEE_EVENT_CONSUMER_ENABLED:true}
     event-topic: ${EVENT_LIFECYCLE_TOPIC:event-platform.event-lifecycle.v1}
+    payment-topic: ${PAYMENT_LIFECYCLE_TOPIC:event-platform.payment-lifecycle.v1}
+  booking-saga:
+    recovery-interval: ${BOOKING_SAGA_RECOVERY_INTERVAL:5s}
   outbox:
     enabled: ${ATTENDEE_OUTBOX_ENABLED:true}
     topic: ${ATTENDEE_LIFECYCLE_TOPIC:event-platform.attendee-lifecycle.v1}

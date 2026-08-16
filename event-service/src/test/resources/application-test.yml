@@ -12,6 +12,8 @@ spring:
     scheduling:
       enabled: false
 platform:
+  integration-events:
+    enabled: false
   outbox:
     enabled: false
   inventory:

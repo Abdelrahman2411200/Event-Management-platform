@@ -1,1 +1,1 @@
--- Phase 1 baseline. Domain tables are introduced with the payment feature phase.
+-- Flyway baseline. Phase 5 payment tables are introduced by V2.

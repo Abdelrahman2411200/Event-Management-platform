@@ -11,6 +11,9 @@ import com.eventplatform.attendee.domain.BookingLineItem;
 import com.eventplatform.attendee.domain.BookingLineItemRepository;
 import com.eventplatform.attendee.domain.BookingRepository;
 import com.eventplatform.attendee.domain.BookingStatus;
+import com.eventplatform.attendee.domain.BookingSaga;
+import com.eventplatform.attendee.domain.BookingSagaRepository;
+import com.eventplatform.attendee.domain.BookingSagaState;
 import com.eventplatform.attendee.domain.Registration;
 import com.eventplatform.attendee.domain.RegistrationRepository;
 import com.eventplatform.attendee.domain.RegistrationStatus;
@@ -38,6 +41,7 @@ public class BookingPersistenceService {
     private final BookingLineItemRepository lineItemRepository;
     private final TicketHoldRepository holdRepository;
     private final TicketRepository ticketRepository;
+    private final BookingSagaRepository sagaRepository;
     private final BookingResponseMapper responseMapper;
     private final AttendeeTransactionalOutbox outbox;
     private final Clock clock;
@@ -49,6 +53,7 @@ public class BookingPersistenceService {
             BookingLineItemRepository lineItemRepository,
             TicketHoldRepository holdRepository,
             TicketRepository ticketRepository,
+            BookingSagaRepository sagaRepository,
             BookingResponseMapper responseMapper,
             AttendeeTransactionalOutbox outbox,
             Clock clock) {
@@ -58,6 +63,7 @@ public class BookingPersistenceService {
         this.lineItemRepository = lineItemRepository;
         this.holdRepository = holdRepository;
         this.ticketRepository = ticketRepository;
+        this.sagaRepository = sagaRepository;
         this.responseMapper = responseMapper;
         this.outbox = outbox;
         this.clock = clock;
@@ -114,7 +120,23 @@ public class BookingPersistenceService {
                 inventory.quantity(), localHoldStatus, inventory.expiresAt(), inventory.confirmedAt(), now);
         holdRepository.save(hold);
 
+        BookingSagaState initialSagaState = inventory.status() == EventInventoryPort.InventoryStatus.CONFIRMED
+                ? BookingSagaState.CONFIRMED
+                : inventory.status() == EventInventoryPort.InventoryStatus.ACTIVE
+                        ? BookingSagaState.PAYMENT_PENDING : BookingSagaState.EXPIRED;
+        sagaRepository.save(new BookingSaga(booking.getId(), initialSagaState, now));
+
         appendBookingCreated(booking, lineItem, hold, context, now);
+        if (inventory.status() == EventInventoryPort.InventoryStatus.ACTIVE && total.signum() > 0) {
+            outbox.append("Booking", booking.getId(), AttendeeLifecycleEvents.PAYMENT_REQUESTED,
+                    AttendeeLifecycleEvents.VERSION,
+                    new AttendeeLifecycleEvents.BookingPaymentRequestedV1(
+                            booking.getId(), booking.getAttendeeId(), booking.getEventId(),
+                            lineItem.getEventOrganizerId(), hold.getInventoryReservationId(),
+                            lineItem.getTicketTypeId(), lineItem.getQuantity(), lineItem.getUnitPrice(),
+                            booking.getTotalAmount(), booking.getCurrency(), lineItem.getEventStartsAt(),
+                            hold.getExpiresAt(), now), context, now);
+        }
         if (inventory.status() == EventInventoryPort.InventoryStatus.CONFIRMED) {
             issueTickets(booking, registration, lineItem, inventory.quantity(), context, now);
         } else if (inventory.status() == EventInventoryPort.InventoryStatus.EXPIRED
@@ -181,6 +203,9 @@ public class BookingPersistenceService {
         Booking booking = bookingRepository.findByIdForUpdate(hold.getBookingId()).orElseThrow();
         if (booking.getStatus() != BookingStatus.CANCELLED && booking.getStatus() != BookingStatus.REFUNDED) {
             booking.expire(now);
+            sagaRepository.findByIdForUpdate(booking.getId()).ifPresent(saga -> {
+                if (saga.getState() == BookingSagaState.PAYMENT_PENDING) saga.expired(now);
+            });
             registrationRepository.findById(booking.getRegistrationId())
                     .ifPresent(registration -> registration.expire(now));
             ticketRepository.findAllByBookingIdForUpdate(booking.getId()).forEach(ticket -> ticket.cancel(now));

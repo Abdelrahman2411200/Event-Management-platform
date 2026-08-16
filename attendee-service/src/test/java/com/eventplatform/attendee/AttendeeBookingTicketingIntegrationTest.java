@@ -22,6 +22,7 @@ import com.eventplatform.attendee.api.RequestContext;
 import com.eventplatform.attendee.application.BookingCoordinator;
 import com.eventplatform.attendee.application.BookingPersistenceService;
 import com.eventplatform.attendee.application.BookingQueryService;
+import com.eventplatform.attendee.application.BookingSagaService;
 import com.eventplatform.attendee.application.EventInventoryPort;
 import com.eventplatform.attendee.application.TicketScanService;
 import com.eventplatform.attendee.domain.AttendeeProfileRepository;
@@ -29,6 +30,8 @@ import com.eventplatform.attendee.domain.BookingCommandRepository;
 import com.eventplatform.attendee.domain.BookingLineItemRepository;
 import com.eventplatform.attendee.domain.BookingRepository;
 import com.eventplatform.attendee.domain.BookingStatus;
+import com.eventplatform.attendee.domain.BookingSagaRepository;
+import com.eventplatform.attendee.domain.BookingSagaState;
 import com.eventplatform.attendee.domain.CheckInAttemptRepository;
 import com.eventplatform.attendee.domain.CheckInRepository;
 import com.eventplatform.attendee.domain.RegistrationRepository;
@@ -76,6 +79,7 @@ class AttendeeBookingTicketingIntegrationTest {
     @Autowired private BookingCoordinator coordinator;
     @Autowired private BookingQueryService queryService;
     @Autowired private BookingPersistenceService persistenceService;
+    @Autowired private BookingSagaService sagaService;
     @Autowired private TicketScanService scanService;
     @Autowired private MockMvc mockMvc;
 
@@ -87,6 +91,7 @@ class AttendeeBookingTicketingIntegrationTest {
     @Autowired private TicketHoldRepository holdRepository;
     @Autowired private BookingLineItemRepository lineItemRepository;
     @Autowired private BookingRepository bookingRepository;
+    @Autowired private BookingSagaRepository sagaRepository;
     @Autowired private RegistrationRepository registrationRepository;
     @Autowired private BookingCommandRepository commandRepository;
     @Autowired private AttendeeProfileRepository profileRepository;
@@ -103,6 +108,7 @@ class AttendeeBookingTicketingIntegrationTest {
         ticketRepository.deleteAll();
         holdRepository.deleteAll();
         lineItemRepository.deleteAll();
+        sagaRepository.deleteAll();
         bookingRepository.deleteAll();
         registrationRepository.deleteAll();
         commandRepository.deleteAll();
@@ -168,6 +174,56 @@ class AttendeeBookingTicketingIntegrationTest {
         assertThat(outboxRepository.findAll())
                 .extracting(com.eventplatform.attendee.outbox.AttendeeOutboxMessage::getEventType)
                 .contains("event-platform.booking.created.v1", "event-platform.ticket-hold.expired.v1");
+    }
+
+    @Test
+    void paidBookingRecoversTemporaryConfirmationAndIssuesTicketsExactlyOnce() {
+        UUID eventId = UUID.randomUUID();
+        UUID ticketTypeId = UUID.randomUUID();
+        EventInventoryPort.InventoryHold active = hold(eventId, ticketTypeId, new BigDecimal("25.00"),
+                EventInventoryPort.InventoryStatus.ACTIVE, Instant.now().plusSeconds(900));
+        when(inventoryPort.reserve(any(), any(), anyInt(), anyString(), any())).thenReturn(active);
+        AttendeeApi.BookingResponse booking = coordinator.create(
+                new AttendeeApi.CreateBookingRequest(eventId, ticketTypeId, 1), "paid-saga", ATTENDEE, CONTEXT);
+        UUID paymentId = UUID.randomUUID();
+
+        sagaService.paymentSucceeded(booking.id(), paymentId, ATTENDEE_ID,
+                new BigDecimal("25.00"), "USD", CONTEXT);
+        assertThat(queryService.get(booking.id(), ATTENDEE).saga().state())
+                .isEqualTo(BookingSagaState.INVENTORY_CONFIRMATION_PENDING);
+        sagaService.recover(booking.id());
+        assertThat(outboxRepository.findAll().stream().filter(message ->
+                "event-platform.inventory.confirmation-requested.v1".equals(message.getEventType())))
+                .hasSize(2);
+
+        sagaService.inventoryConfirmed(active.id(), CONTEXT);
+        sagaService.inventoryConfirmed(active.id(), CONTEXT);
+        AttendeeApi.BookingResponse confirmed = queryService.get(booking.id(), ATTENDEE);
+        assertThat(confirmed.status()).isEqualTo(BookingStatus.CONFIRMED);
+        assertThat(confirmed.tickets()).hasSize(1);
+        assertThat(outboxRepository.findAll().stream().filter(message ->
+                "event-platform.booking.confirmed.v1".equals(message.getEventType())))
+                .hasSize(1);
+    }
+
+    @Test
+    void paymentSettledAfterHoldExpiryRequestsCompensation() {
+        UUID eventId = UUID.randomUUID();
+        UUID ticketTypeId = UUID.randomUUID();
+        EventInventoryPort.InventoryHold active = hold(eventId, ticketTypeId, BigDecimal.TEN,
+                EventInventoryPort.InventoryStatus.ACTIVE, Instant.now().minusSeconds(1));
+        when(inventoryPort.reserve(any(), any(), anyInt(), anyString(), any())).thenReturn(active);
+        AttendeeApi.BookingResponse booking = coordinator.create(
+                new AttendeeApi.CreateBookingRequest(eventId, ticketTypeId, 1), "late-payment", ATTENDEE, CONTEXT);
+
+        sagaService.paymentSucceeded(booking.id(), UUID.randomUUID(), ATTENDEE_ID, BigDecimal.TEN, "USD", CONTEXT);
+
+        AttendeeApi.BookingResponse compensated = queryService.get(booking.id(), ATTENDEE);
+        assertThat(compensated.status()).isEqualTo(BookingStatus.COMPENSATION_PENDING);
+        assertThat(compensated.saga().state()).isEqualTo(BookingSagaState.COMPENSATION_PENDING);
+        assertThat(outboxRepository.findAll()).extracting(
+                com.eventplatform.attendee.outbox.AttendeeOutboxMessage::getEventType)
+                .contains("event-platform.payment.compensation-requested.v1");
     }
 
     @Test

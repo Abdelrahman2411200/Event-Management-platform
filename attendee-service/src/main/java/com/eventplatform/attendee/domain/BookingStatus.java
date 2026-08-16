@@ -3,6 +3,11 @@ package com.eventplatform.attendee.domain;
 public enum BookingStatus {
     HOLD_CREATED,
     PAYMENT_PENDING,
+    PAYMENT_PROCESSING,
+    CONFIRMATION_PENDING,
+    PAYMENT_FAILED,
+    COMPENSATION_PENDING,
+    PARTIALLY_REFUNDED,
     CONFIRMED,
     EXPIRED,
     CANCELLED,

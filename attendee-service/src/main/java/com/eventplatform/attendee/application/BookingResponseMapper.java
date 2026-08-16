@@ -5,6 +5,8 @@ import com.eventplatform.attendee.api.AttendeeApiException;
 import com.eventplatform.attendee.domain.Booking;
 import com.eventplatform.attendee.domain.BookingLineItem;
 import com.eventplatform.attendee.domain.BookingLineItemRepository;
+import com.eventplatform.attendee.domain.BookingSaga;
+import com.eventplatform.attendee.domain.BookingSagaRepository;
 import com.eventplatform.attendee.domain.Registration;
 import com.eventplatform.attendee.domain.RegistrationRepository;
 import com.eventplatform.attendee.domain.Ticket;
@@ -21,6 +23,7 @@ public class BookingResponseMapper {
     private final BookingLineItemRepository lineItemRepository;
     private final TicketHoldRepository holdRepository;
     private final TicketRepository ticketRepository;
+    private final BookingSagaRepository sagaRepository;
     private final QrTokenService qrTokenService;
 
     public BookingResponseMapper(
@@ -28,11 +31,13 @@ public class BookingResponseMapper {
             BookingLineItemRepository lineItemRepository,
             TicketHoldRepository holdRepository,
             TicketRepository ticketRepository,
+            BookingSagaRepository sagaRepository,
             QrTokenService qrTokenService) {
         this.registrationRepository = registrationRepository;
         this.lineItemRepository = lineItemRepository;
         this.holdRepository = holdRepository;
         this.ticketRepository = ticketRepository;
+        this.sagaRepository = sagaRepository;
         this.qrTokenService = qrTokenService;
     }
 
@@ -43,10 +48,14 @@ public class BookingResponseMapper {
         TicketHold hold = holdRepository.findByBookingId(booking.getId())
                 .orElseThrow(() -> new AttendeeApiException(
                         HttpStatus.INTERNAL_SERVER_ERROR, "TICKET_HOLD_MISSING", "Booking hold state is unavailable"));
+        BookingSaga saga = sagaRepository.findById(booking.getId()).orElseThrow(() -> new AttendeeApiException(
+                HttpStatus.INTERNAL_SERVER_ERROR, "BOOKING_SAGA_MISSING", "Booking saga state is unavailable"));
         return new AttendeeApi.BookingResponse(
                 booking.getId(), booking.getAttendeeId(), booking.getRegistrationId(), booking.getEventId(),
                 registration.getStatus(), booking.getStatus(), booking.getTotalAmount(), booking.getCurrency(),
                 booking.getHoldExpiresAt(),
+                new AttendeeApi.SagaResponse(saga.getPaymentId(), saga.getState(), saga.getFailureCode(),
+                        saga.getFailureReason(), saga.getRecoveryAttempts(), saga.getNextActionAt()),
                 lineItemRepository.findAllByBookingId(booking.getId()).stream().map(this::lineItem).toList(),
                 hold(hold),
                 ticketRepository.findAllByBookingIdOrderByIssuedAt(booking.getId()).stream().map(this::ticket).toList(),

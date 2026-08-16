@@ -77,6 +77,13 @@ class GatewaySecurityIntegrationTest {
                 .uri("/api/v1/events/00000000-0000-0000-0000-000000000000/ticket-types/example/inventory")
                 .exchange()
                 .expectStatus().isUnauthorized();
+
+        webTestClient.post()
+                .uri("/api/v1/payments/webhooks/fake")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().value(status -> assertThat(status).isNotEqualTo(401));
     }
 
     @Test

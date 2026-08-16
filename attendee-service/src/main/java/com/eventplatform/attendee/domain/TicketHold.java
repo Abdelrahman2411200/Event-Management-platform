@@ -78,6 +78,14 @@ public class TicketHold {
         }
     }
 
+    public void confirm(Instant now) {
+        if (status == TicketHoldStatus.ACTIVE) {
+            status = TicketHoldStatus.CONFIRMED;
+            confirmedAt = now;
+            updatedAt = now;
+        }
+    }
+
     public UUID getId() { return id; }
     public UUID getBookingId() { return bookingId; }
     public UUID getInventoryReservationId() { return inventoryReservationId; }

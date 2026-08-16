@@ -2,7 +2,7 @@
 
 ## Current scope
 
-Phase 1 established the local-first platform foundation, Phase 2 added authentication and gateway security, and Phase 3 implemented venues, events, ticket products, and temporary inventory holds. Phase 4 implements attendee profiles, booking process state, zero-price ticket issuance, signed QR validation, and check-in. Provider-backed payment, notification delivery, and waitlisting remain deferred.
+Phase 1 established the local-first platform foundation, Phase 2 added authentication and gateway security, Phase 3 implemented venues/events/inventory, and Phase 4 added attendee booking and ticketing. Phase 5 implements provider-neutral payments, refunds, webhook verification, reconciliation, and the distributed booking/payment Saga. Notification delivery and waitlisting remain deferred.
 
 ```mermaid
 flowchart TB
@@ -27,8 +27,10 @@ flowchart TB
     Events -->|transactional outbox| Kafka
     Venues -. future events .-> Kafka
     Attendees -->|transactional outbox| Kafka
-    Kafka -->|inventory expiry and event cancellation| Attendees
-    Payments -. future events .-> Kafka
+    Kafka -->|inventory state and payment results| Attendees
+    Payments -->|transactional outbox| Kafka
+    Kafka -->|booking orders, tickets, compensation| Payments
+    Kafka -->|inventory Saga commands| Events
     Notifications -. future events .-> Kafka
 
     Services[Gateway and services] --> OTel[OpenTelemetry Collector]
@@ -50,7 +52,7 @@ PostgreSQL databases are separate logical databases in one local container to ke
 | `event-service` | Event lifecycle, categories, schedules, ticket products, inventory holds, public discovery cache, and lifecycle outbox | Venue records, attendee bookings, issued tickets, or payments |
 | `venue-service` | Venues, rooms, capacity, location metadata, availability blocks, event assignment reservations, and maps adapter boundary | Event lifecycle or ticket inventory |
 | `attendee-service` | Attendee profiles, registrations, booking commands/process state, ticket-hold projections, signed tickets, scan audit, check-in, and lifecycle outbox | Payment transactions, event entities, or authoritative ticket inventory |
-| `payment-service` | Future payment attempts, provider references, refunds, and payment ledger | Booking or attendee entities |
+| `payment-service` | Booking-payment projections, provider-neutral payments/attempts, transaction history, refunds, signed webhook deduplication, reconciliation, ticket projections, and lifecycle outbox | Booking, attendee, event, or inventory entities |
 | `notification-service` | Future notification requests, templates, delivery attempts, and provider results | Source domain records from other services |
 | `frontend` | Browser presentation and interaction | Business authority or secrets |
 
@@ -76,17 +78,17 @@ Every network call has a timeout. Retries are allowed only for operations known 
 
 Any future transaction that changes service-owned state and must publish a Kafka event will write both the domain change and an outbox row in the same local database transaction. A relay publishes the outbox record and marks it published. At-least-once delivery is assumed, so consumers must be idempotent. Publishing directly after a database commit is not considered reliable enough.
 
-Phase 3 introduced event-service's outbox for versioned event lifecycle and ticket-product changes. Phase 4 adds attendee-service's outbox for bookings, hold expiry, ticket issuance, and check-in. Each relay marks rows only after Kafka acknowledgement.
+Event-service, attendee-service, and payment-service now own outboxes for their state changes. Each relay marks rows only after Kafka acknowledgement.
 
 ## Booking and payment Saga
 
-The booking/payment flow uses an orchestrated Saga. Phase 4 establishes attendee-owned booking process state and stops priced bookings at `PAYMENT_PENDING`; Phase 5 will connect payment and refund steps. The attendee service is the process manager, while payment-service owns payment/refund state. Each step persists its result before emitting the next event through its outbox.
+The booking/payment flow uses an orchestrated Saga. Attendee-service is the process manager, payment-service owns payment/refund state, and event-service owns inventory. A verified `PaymentSucceeded` leads to an idempotent inventory-confirmation command; only event-service confirmation permits booking confirmation and ticket issuance.
 
-Compensation is explicit. For example, a failed final booking step after payment authorization triggers a payment release or refund command. Compensation failure becomes a visible recoverable state for operations; it is not hidden by an infinite retry loop. No service opens a transaction against another service's database.
+Compensation is explicit. Payment settlement after hold expiry or permanent inventory rejection triggers a deterministic full refund command. Temporary failures remain visible with bounded recovery metadata. No service opens a transaction against another service's database.
 
 ## Idempotency
 
-- Ticket inventory reserve, confirm, and release commands plus Phase 4 booking and scan commands require `Idempotency-Key`; later public mutating commands follow the same pattern.
+- Ticket inventory, booking, scan, payment, and refund commands require `Idempotency-Key` where client initiated. Saga commands use stable `commandKey` values.
 - The owning service binds each globally unique key to its caller and operation input, persists the resulting resource/state, and rejects reuse with different input.
 - Kafka messages carry a globally unique `eventId`. Each consumer records processed IDs within its own data boundary or performs an equivalent atomic business-state check.
 - Retries must return the original outcome or safely converge on it. Exactly-once business semantics are achieved by application design, not assumed from transport settings.
@@ -95,6 +97,6 @@ Compensation is explicit. For example, a failed final booking step after payment
 
 Payment, email, SMS, maps, object storage, and AI integrations enter the owning service through an application port/interface. Provider SDKs, credentials, payloads, and error types remain in outbound adapter packages. Domain/application code depends on the port, while local tests use in-memory or deterministic fake adapters.
 
-Venue location enrichment now uses a provider-neutral port with a no-network local adapter. No object-storage flow exists in the current phase, so MinIO is not started. When an object use case is introduced, the first adapter will support a local S3-compatible provider and a cloud provider through the same port without making AWS credentials a local prerequisite.
+Payment now uses a provider-neutral port with a deterministic no-credential fake adapter for create, verify, webhook, and refund behavior. Venue location enrichment retains its provider-neutral no-network adapter. No object-storage flow exists in the current phase, so MinIO is not started. When an object use case is introduced, the first adapter will support a local S3-compatible provider and a cloud provider through the same port without making AWS credentials a local prerequisite.
 
 Kubernetes, Helm, Terraform, and AWS topology are future deployment concerns and are not dependencies of local builds or tests.
