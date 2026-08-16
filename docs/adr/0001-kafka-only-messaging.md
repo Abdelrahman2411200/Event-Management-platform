@@ -13,4 +13,4 @@ Apache Kafka is the only asynchronous messaging platform. RabbitMQ and other bro
 
 ## Consequences
 
-Local development runs one KRaft Kafka broker. Future production topology may add brokers, partitions, schema governance, access control, and dead-letter handling, while preserving application semantics. Teams learn and operate one messaging model, and consumers must implement idempotency.
+Local development runs one KRaft Kafka broker. Phase 6 standardizes versioned topics and events, canonical metadata, bounded exponential retry, and per-source `.dlt` topics. Future production topology may add brokers, partitions, schema governance, and access control while preserving application semantics. Teams learn and operate one messaging model, and consumers must implement idempotency.

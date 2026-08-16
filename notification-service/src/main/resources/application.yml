@@ -17,9 +17,39 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${NOTIFICATION_KAFKA_GROUP:notification-service-v1}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
 platform:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:urn:event-platform:auth}
+      audience: ${JWT_AUDIENCE:event-platform-api}
+      jwk-set-uri: ${JWT_JWK_SET_URI:http://localhost:8081/api/v1/auth/.well-known/jwks.json}
+  integration-events:
+    enabled: ${NOTIFICATION_EVENT_CONSUMER_ENABLED:true}
+    event-topic: ${EVENT_LIFECYCLE_TOPIC:event-platform.event-lifecycle.v1}
+    attendee-topic: ${ATTENDEE_LIFECYCLE_TOPIC:event-platform.attendee-lifecycle.v1}
+    payment-topic: ${PAYMENT_LIFECYCLE_TOPIC:event-platform.payment-lifecycle.v1}
+  notification:
+    email-provider: ${NOTIFICATION_EMAIL_PROVIDER:local}
+    sms-provider: ${NOTIFICATION_SMS_PROVIDER:local}
+    reminder-lead: ${NOTIFICATION_REMINDER_LEAD:24h}
+    delivery-max-attempts: ${NOTIFICATION_DELIVERY_MAX_ATTEMPTS:5}
+    delivery-batch-size: ${NOTIFICATION_DELIVERY_BATCH_SIZE:50}
+    delivery-interval: ${NOTIFICATION_DELIVERY_INTERVAL:1s}
+  kafka:
+    reliability:
+      max-retries: ${KAFKA_CONSUMER_MAX_RETRIES:4}
+      initial-backoff: ${KAFKA_CONSUMER_INITIAL_BACKOFF:1s}
+      multiplier: ${KAFKA_CONSUMER_BACKOFF_MULTIPLIER:2.0}
+      max-backoff: ${KAFKA_CONSUMER_MAX_BACKOFF:30s}
+      dead-letter-suffix: ${KAFKA_DEAD_LETTER_SUFFIX:.dlt}
   metadata:
-    description: Notification delivery boundary; business capabilities are deferred
+    description: Durable event-driven email, SMS, template, preference, and reminder delivery boundary
     version: ${APP_VERSION:@project.version@}
     api-version: v1
 management:

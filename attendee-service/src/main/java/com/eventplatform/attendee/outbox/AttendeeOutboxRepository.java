@@ -14,7 +14,8 @@ public interface AttendeeOutboxRepository extends JpaRepository<AttendeeOutboxMe
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select message from AttendeeOutboxMessage message
-            where message.publishedAt is null and message.nextAttemptAt <= :now
+            where message.publishedAt is null and message.deadLetteredAt is null
+              and message.nextAttemptAt <= :now
             order by message.occurredAt
             """)
     List<AttendeeOutboxMessage> findPending(@Param("now") Instant now, Pageable pageable);

@@ -8,14 +8,19 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
-public record AuthenticatedActor(UUID userId, Set<String> roles) {
+public record AuthenticatedActor(UUID userId, String email, Set<String> roles) {
     public AuthenticatedActor { roles = Set.copyOf(roles); }
+
+    public AuthenticatedActor(UUID userId, Set<String> roles) {
+        this(userId, null, roles);
+    }
 
     public static AuthenticatedActor from(JwtAuthenticationToken authentication) {
         try {
             List<String> claims = authentication.getToken().getClaimAsStringList("roles");
             return new AuthenticatedActor(
                     UUID.fromString(authentication.getToken().getSubject()),
+                    authentication.getToken().getClaimAsString("email"),
                     claims == null ? Set.of() : new HashSet<>(claims));
         } catch (RuntimeException exception) {
             throw new AttendeeApiException(HttpStatus.UNAUTHORIZED, "INVALID_ACCESS_TOKEN", "The access token subject is invalid");

@@ -46,6 +46,14 @@ platform:
     topic: ${PAYMENT_EVENTS_TOPIC:event-platform.payment-lifecycle.v1}
     batch-size: ${OUTBOX_BATCH_SIZE:50}
     publish-interval: ${OUTBOX_PUBLISH_INTERVAL:1s}
+    max-attempts: ${PAYMENT_OUTBOX_MAX_ATTEMPTS:10}
+  kafka:
+    reliability:
+      max-retries: ${KAFKA_CONSUMER_MAX_RETRIES:4}
+      initial-backoff: ${KAFKA_CONSUMER_INITIAL_BACKOFF:1s}
+      multiplier: ${KAFKA_CONSUMER_BACKOFF_MULTIPLIER:2.0}
+      max-backoff: ${KAFKA_CONSUMER_MAX_BACKOFF:30s}
+      dead-letter-suffix: ${KAFKA_DEAD_LETTER_SUFFIX:.dlt}
 management:
   endpoints:
     web:

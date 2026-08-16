@@ -65,7 +65,7 @@ The fake adapter accepts `sandbox-success`, `sandbox-success-refund-fail-once`, 
 
 ## Integration events
 
-All records use version 1, UUID `eventId`, `eventType`, `occurredAt`, `producer`, correlation ID, and optional W3C `traceparent` headers.
+All records use payload schema version 1 and the canonical metadata defined in the [Kafka event catalog](kafka-event-catalog.md), including UUID `messageId`, `eventType`, producer, occurrence/correlation/trace data, and aggregate identity.
 
 | Topic | Important event types |
 | --- | --- |

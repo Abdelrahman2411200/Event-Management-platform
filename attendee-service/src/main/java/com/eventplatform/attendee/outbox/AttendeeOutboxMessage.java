@@ -6,8 +6,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import com.eventplatform.kafka.OutboxRetryPolicy;
 
 @Entity
 @Table(name = "attendee_outbox_messages")
@@ -26,6 +26,7 @@ public class AttendeeOutboxMessage {
     @Column(name = "publish_attempts", nullable = false) private int publishAttempts;
     @Column(name = "next_attempt_at", nullable = false) private Instant nextAttemptAt;
     @Column(name = "last_error", length = 500) private String lastError;
+    @Column(name = "dead_lettered_at") private Instant deadLetteredAt;
     @Version private long version;
 
     protected AttendeeOutboxMessage() {
@@ -52,19 +53,22 @@ public class AttendeeOutboxMessage {
         lastError = null;
     }
 
-    public void markFailed(String error, Instant now) {
+    public void markFailed(String error, Instant now, int maxAttempts) {
         publishAttempts++;
-        long delaySeconds = Math.min(60, 1L << Math.min(publishAttempts, 5));
-        nextAttemptAt = now.plus(delaySeconds, ChronoUnit.SECONDS);
-        lastError = error == null ? "Kafka publication failed" : error.substring(0, Math.min(error.length(), 500));
+        lastError = OutboxRetryPolicy.safeError(error);
+        if (publishAttempts >= maxAttempts) deadLetteredAt = now;
+        else nextAttemptAt = OutboxRetryPolicy.nextAttempt(now, publishAttempts);
     }
 
     public UUID getId() { return id; }
     public UUID getAggregateId() { return aggregateId; }
+    public String getAggregateType() { return aggregateType; }
     public String getEventType() { return eventType; }
     public int getEventVersion() { return eventVersion; }
     public String getPayload() { return payload; }
     public String getCorrelationId() { return correlationId; }
     public String getTraceparent() { return traceparent; }
     public Instant getOccurredAt() { return occurredAt; }
+    public int getPublishAttempts() { return publishAttempts; }
+    public boolean isDeadLettered() { return deadLetteredAt != null; }
 }

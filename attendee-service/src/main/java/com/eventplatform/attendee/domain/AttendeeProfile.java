@@ -18,6 +18,9 @@ public class AttendeeProfile {
     @Column(name = "display_name", length = 160)
     private String displayName;
 
+    @Column(length = 320)
+    private String email;
+
     @Column(name = "phone_number", length = 32)
     private String phoneNumber;
 
@@ -36,10 +39,18 @@ public class AttendeeProfile {
     protected AttendeeProfile() {
     }
 
-    public AttendeeProfile(UUID id, String displayName, String phoneNumber, String locale, Instant now) {
+    public AttendeeProfile(UUID id, String email, String displayName, String phoneNumber, String locale, Instant now) {
         this.id = id;
         this.createdAt = now;
+        synchronizeIdentity(email, now);
         update(displayName, phoneNumber, locale, now);
+    }
+
+    public void synchronizeIdentity(String email, Instant now) {
+        if (email != null && !email.isBlank()) {
+            this.email = email.trim().toLowerCase(java.util.Locale.ROOT);
+            this.updatedAt = now;
+        }
     }
 
     public void update(String displayName, String phoneNumber, String locale, Instant now) {
@@ -54,6 +65,7 @@ public class AttendeeProfile {
     }
 
     public UUID getId() { return id; }
+    public String getEmail() { return email; }
     public String getDisplayName() { return displayName; }
     public String getPhoneNumber() { return phoneNumber; }
     public String getLocale() { return locale; }

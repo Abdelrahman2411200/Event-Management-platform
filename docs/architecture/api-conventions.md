@@ -51,16 +51,19 @@ At the HTTP edge:
 3. Forward the value downstream, return it in the response, and place it in logging context as `correlationId`.
 4. Propagate the W3C `traceparent` header independently through Micrometer/OpenTelemetry. A correlation ID groups a business request; trace and span IDs describe a particular distributed execution.
 
-Future Kafka records use these headers:
+Kafka records use these headers:
 
 | Header | Purpose |
 | --- | --- |
-| `eventId` | Globally unique event identity used for deduplication |
+| `messageId` | Globally unique message identity used for deduplication |
+| `eventId` | Rolling-upgrade alias of `messageId` |
 | `eventType` | Stable namespaced event name |
-| `eventVersion` | Positive integer schema version |
+| `schemaVersion` | Positive integer payload schema version |
+| `eventVersion` | Rolling-upgrade alias of `schemaVersion` |
 | `occurredAt` | UTC event time in ISO-8601 form |
 | `producer` | Publishing service name |
+| `aggregateType`, `aggregateId` | Owning aggregate and business partition identity |
 | `correlationId` | Original request/workflow correlation value |
 | `traceparent` | W3C trace continuation when available |
 
-Consumers start a new trace when no valid trace context exists, while preserving `correlationId` across the workflow.
+Consumers start a new trace when no valid trace context exists, while preserving `correlationId` across the workflow. See the [Kafka event catalog](kafka-event-catalog.md) for versioning, consumers, retry, and DLT rules.

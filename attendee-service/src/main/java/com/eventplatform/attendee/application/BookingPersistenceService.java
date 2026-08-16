@@ -4,6 +4,8 @@ import com.eventplatform.attendee.api.AttendeeApi;
 import com.eventplatform.attendee.api.AttendeeApiException;
 import com.eventplatform.attendee.api.RequestContext;
 import com.eventplatform.attendee.domain.Booking;
+import com.eventplatform.attendee.domain.AttendeeProfile;
+import com.eventplatform.attendee.domain.AttendeeProfileRepository;
 import com.eventplatform.attendee.domain.BookingCommand;
 import com.eventplatform.attendee.domain.BookingCommandRepository;
 import com.eventplatform.attendee.domain.BookingCommandStatus;
@@ -36,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BookingPersistenceService {
     private final BookingCommandRepository commandRepository;
+    private final AttendeeProfileRepository profileRepository;
     private final BookingRepository bookingRepository;
     private final RegistrationRepository registrationRepository;
     private final BookingLineItemRepository lineItemRepository;
@@ -44,10 +47,12 @@ public class BookingPersistenceService {
     private final BookingSagaRepository sagaRepository;
     private final BookingResponseMapper responseMapper;
     private final AttendeeTransactionalOutbox outbox;
+    private final QrTokenService qrTokenService;
     private final Clock clock;
 
     public BookingPersistenceService(
             BookingCommandRepository commandRepository,
+            AttendeeProfileRepository profileRepository,
             BookingRepository bookingRepository,
             RegistrationRepository registrationRepository,
             BookingLineItemRepository lineItemRepository,
@@ -56,8 +61,10 @@ public class BookingPersistenceService {
             BookingSagaRepository sagaRepository,
             BookingResponseMapper responseMapper,
             AttendeeTransactionalOutbox outbox,
+            QrTokenService qrTokenService,
             Clock clock) {
         this.commandRepository = commandRepository;
+        this.profileRepository = profileRepository;
         this.bookingRepository = bookingRepository;
         this.registrationRepository = registrationRepository;
         this.lineItemRepository = lineItemRepository;
@@ -66,6 +73,7 @@ public class BookingPersistenceService {
         this.sagaRepository = sagaRepository;
         this.responseMapper = responseMapper;
         this.outbox = outbox;
+        this.qrTokenService = qrTokenService;
         this.clock = clock;
     }
 
@@ -126,7 +134,8 @@ public class BookingPersistenceService {
                         ? BookingSagaState.PAYMENT_PENDING : BookingSagaState.EXPIRED;
         sagaRepository.save(new BookingSaga(booking.getId(), initialSagaState, now));
 
-        appendBookingCreated(booking, lineItem, hold, context, now);
+        AttendeeProfile profile = profileRepository.findById(booking.getAttendeeId()).orElseThrow();
+        appendBookingCreated(booking, lineItem, hold, profile, context, now);
         if (inventory.status() == EventInventoryPort.InventoryStatus.ACTIVE && total.signum() > 0) {
             outbox.append("Booking", booking.getId(), AttendeeLifecycleEvents.PAYMENT_REQUESTED,
                     AttendeeLifecycleEvents.VERSION,
@@ -134,11 +143,12 @@ public class BookingPersistenceService {
                             booking.getId(), booking.getAttendeeId(), booking.getEventId(),
                             lineItem.getEventOrganizerId(), hold.getInventoryReservationId(),
                             lineItem.getTicketTypeId(), lineItem.getQuantity(), lineItem.getUnitPrice(),
-                            booking.getTotalAmount(), booking.getCurrency(), lineItem.getEventStartsAt(),
+                            booking.getTotalAmount(), booking.getCurrency(), lineItem.getEventTitle(),
+                            profile.getEmail(), profile.getPhoneNumber(), profile.getLocale(), lineItem.getEventStartsAt(),
                             hold.getExpiresAt(), now), context, now);
         }
         if (inventory.status() == EventInventoryPort.InventoryStatus.CONFIRMED) {
-            issueTickets(booking, registration, lineItem, inventory.quantity(), context, now);
+            issueTickets(booking, registration, lineItem, profile, inventory.quantity(), context, now);
         } else if (inventory.status() == EventInventoryPort.InventoryStatus.EXPIRED
                 || inventory.status() == EventInventoryPort.InventoryStatus.RELEASED) {
             appendHoldExpired(booking, hold, context, now);
@@ -214,7 +224,7 @@ public class BookingPersistenceService {
     }
 
     private void issueTickets(
-            Booking booking, Registration registration, BookingLineItem lineItem, int quantity,
+            Booking booking, Registration registration, BookingLineItem lineItem, AttendeeProfile profile, int quantity,
             RequestContext context, Instant now) {
         for (int sequence = 0; sequence < quantity; sequence++) {
             Ticket ticket = new Ticket(UUID.randomUUID(), booking.getId(), registration.getId(), lineItem,
@@ -224,18 +234,23 @@ public class BookingPersistenceService {
                     AttendeeLifecycleEvents.VERSION,
                     new AttendeeLifecycleEvents.TicketIssuedV1(
                             ticket.getId(), booking.getId(), booking.getAttendeeId(), booking.getEventId(),
-                            ticket.getTicketTypeId(), now), context, now);
+                            ticket.getTicketTypeId(), ticket.getEventTitle(), ticket.getTicketTypeName(),
+                            ticket.getEventStartsAt(), profile.getEmail(), profile.getPhoneNumber(), profile.getLocale(),
+                            qrTokenService.issue(ticket), now), context, now);
         }
     }
 
     private void appendBookingCreated(
-            Booking booking, BookingLineItem lineItem, TicketHold hold, RequestContext context, Instant now) {
+            Booking booking, BookingLineItem lineItem, TicketHold hold, AttendeeProfile profile,
+            RequestContext context, Instant now) {
         outbox.append("Booking", booking.getId(), AttendeeLifecycleEvents.BOOKING_CREATED,
                 AttendeeLifecycleEvents.VERSION,
                 new AttendeeLifecycleEvents.BookingCreatedV1(
-                        booking.getId(), booking.getAttendeeId(), booking.getEventId(), lineItem.getTicketTypeId(),
+                        booking.getId(), booking.getAttendeeId(), profile.getEmail(), profile.getPhoneNumber(),
+                        profile.getLocale(), profile.getDisplayName(), booking.getEventId(), lineItem.getTicketTypeId(),
                         hold.getInventoryReservationId(), lineItem.getQuantity(), booking.getTotalAmount(),
-                        booking.getCurrency(), booking.getStatus(), booking.getHoldExpiresAt(), now), context, now);
+                        booking.getCurrency(), booking.getStatus(), lineItem.getEventTitle(), lineItem.getTicketTypeName(),
+                        lineItem.getEventStartsAt(), booking.getHoldExpiresAt(), now), context, now);
     }
 
     private void appendHoldExpired(Booking booking, TicketHold hold, RequestContext context, Instant now) {

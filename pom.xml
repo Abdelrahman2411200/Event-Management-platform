@@ -20,6 +20,7 @@
 
     <modules>
         <module>shared/platform-contracts</module>
+        <module>shared/platform-kafka</module>
         <module>shared/platform-web</module>
         <module>shared/data-service-parent</module>
         <module>api-gateway</module>
