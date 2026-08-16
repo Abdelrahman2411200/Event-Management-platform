@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -76,8 +77,8 @@ public class GlobalApiExceptionHandler {
                 List.of());
     }
 
-    @ExceptionHandler(AccessDeniedException.class)
-    ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException exception, HttpServletRequest request) {
+    @ExceptionHandler({AccessDeniedException.class, AuthorizationDeniedException.class})
+    ResponseEntity<ApiError> handleAccessDenied(Exception exception, HttpServletRequest request) {
         return response(
                 HttpStatus.FORBIDDEN,
                 "ACCESS_DENIED",

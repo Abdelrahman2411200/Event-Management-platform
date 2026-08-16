@@ -16,6 +16,8 @@ public interface InventoryReservationRepository extends JpaRepository<InventoryR
 
     Optional<InventoryReservation> findByReleaseIdempotencyKey(String idempotencyKey);
 
+    Optional<InventoryReservation> findByConfirmationIdempotencyKey(String idempotencyKey);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select reservation from InventoryReservation reservation where reservation.id = :id")
     Optional<InventoryReservation> findByIdForUpdate(@Param("id") UUID id);

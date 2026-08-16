@@ -4,6 +4,7 @@ import com.eventplatform.event.application.InventoryService;
 import com.eventplatform.event.security.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import java.net.URI;
@@ -50,13 +51,15 @@ public class InventoryController {
             @PathVariable UUID ticketTypeId,
             @Pattern(regexp = IDEMPOTENCY_PATTERN) @RequestHeader("Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody EventApi.ReserveInventoryRequest request,
-            JwtAuthenticationToken authentication) {
+            JwtAuthenticationToken authentication,
+            HttpServletRequest servletRequest) {
         EventApi.InventoryReservationResponse response = inventoryService.reserve(
                 eventId,
                 ticketTypeId,
                 request.quantity(),
                 idempotencyKey,
-                AuthenticatedActor.from(authentication));
+                AuthenticatedActor.from(authentication),
+                RequestContext.from(servletRequest));
         return ResponseEntity.created(URI.create(
                         "/api/v1/events/" + eventId + "/ticket-types/" + ticketTypeId
                                 + "/inventory/reservations/" + response.id()))
@@ -70,12 +73,32 @@ public class InventoryController {
             @PathVariable UUID ticketTypeId,
             @PathVariable UUID reservationId,
             @Pattern(regexp = IDEMPOTENCY_PATTERN) @RequestHeader("Idempotency-Key") String idempotencyKey,
-            JwtAuthenticationToken authentication) {
+            JwtAuthenticationToken authentication,
+            HttpServletRequest servletRequest) {
         return inventoryService.release(
                 eventId,
                 ticketTypeId,
                 reservationId,
                 idempotencyKey,
-                AuthenticatedActor.from(authentication));
+                AuthenticatedActor.from(authentication),
+                RequestContext.from(servletRequest));
+    }
+
+    @PostMapping("/reservations/{reservationId}/confirm")
+    @Operation(summary = "Idempotently confirm a held inventory reservation")
+    public EventApi.InventoryReservationResponse confirm(
+            @PathVariable UUID eventId,
+            @PathVariable UUID ticketTypeId,
+            @PathVariable UUID reservationId,
+            @Pattern(regexp = IDEMPOTENCY_PATTERN) @RequestHeader("Idempotency-Key") String idempotencyKey,
+            JwtAuthenticationToken authentication,
+            HttpServletRequest servletRequest) {
+        return inventoryService.confirm(
+                eventId,
+                ticketTypeId,
+                reservationId,
+                idempotencyKey,
+                AuthenticatedActor.from(authentication),
+                RequestContext.from(servletRequest));
     }
 }

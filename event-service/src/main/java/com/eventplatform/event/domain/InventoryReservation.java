@@ -39,11 +39,17 @@ public class InventoryReservation {
     @Column(name = "release_idempotency_key", unique = true, length = 128)
     private String releaseIdempotencyKey;
 
+    @Column(name = "confirmation_idempotency_key", unique = true, length = 128)
+    private String confirmationIdempotencyKey;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
     @Column(name = "released_at")
     private Instant releasedAt;
+
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -96,6 +102,17 @@ public class InventoryReservation {
         }
     }
 
+    public void confirm(String idempotencyKey, Instant now) {
+        if (confirmationIdempotencyKey == null) {
+            confirmationIdempotencyKey = idempotencyKey;
+        }
+        if (status == InventoryReservationStatus.ACTIVE) {
+            status = InventoryReservationStatus.CONFIRMED;
+            confirmedAt = now;
+            updatedAt = now;
+        }
+    }
+
     public void expire(Instant now) {
         if (status == InventoryReservationStatus.ACTIVE) {
             status = InventoryReservationStatus.EXPIRED;
@@ -136,8 +153,16 @@ public class InventoryReservation {
         return releaseIdempotencyKey;
     }
 
+    public String getConfirmationIdempotencyKey() {
+        return confirmationIdempotencyKey;
+    }
+
     public Instant getExpiresAt() {
         return expiresAt;
+    }
+
+    public Instant getConfirmedAt() {
+        return confirmedAt;
     }
 
     public Instant getCreatedAt() {

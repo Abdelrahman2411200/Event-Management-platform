@@ -10,3 +10,4 @@ ADRs record decisions that constrain later implementation phases.
 | [0004](0004-api-versioning.md) | URI major-versioned public APIs | Accepted |
 | [0005](0005-token-and-session-security.md) | Signed access tokens and rotated opaque refresh sessions | Accepted |
 | [0006](0006-event-inventory-and-venue-assignment.md) | Locked inventory holds, venue API reservations, and event outbox | Accepted |
+| [0007](0007-attendee-booking-ticket-and-check-in.md) | Durable booking commands, authoritative holds, signed tickets, and locked check-in | Accepted |

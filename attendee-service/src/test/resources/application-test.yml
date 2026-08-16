@@ -6,6 +6,20 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  task:
+    scheduling:
+      enabled: false
+platform:
+  security:
+    qr:
+      signing-secret: phase-4-test-signing-key-at-least-32-bytes
+      allow-ephemeral-key: false
+  holds:
+    expiry-enabled: false
+  integration-events:
+    enabled: false
+  outbox:
+    enabled: false
 management:
   tracing:
     enabled: false

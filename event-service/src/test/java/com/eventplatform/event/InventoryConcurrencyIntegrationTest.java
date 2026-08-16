@@ -112,7 +112,7 @@ class InventoryConcurrencyIntegrationTest {
                         startsAt.plusSeconds(7_200),
                         UUID.randomUUID(),
                         null,
-                        5),
+                        1),
                 ORGANIZER,
                 CONTEXT);
         EventApi.TicketTypeResponse ticket = ticketTypeService.create(
@@ -122,17 +122,17 @@ class InventoryConcurrencyIntegrationTest {
                         null,
                         new BigDecimal("10.00"),
                         "USD",
-                        5,
+                        1,
                         Instant.now().minusSeconds(60),
                         Instant.now().plusSeconds(86_400),
                         1,
-                        5,
+                        1,
                         TicketTypeStatus.ACTIVE),
                 ORGANIZER,
                 CONTEXT);
         when(venueAvailabilityPort.reserve(any(), any(), any(), any(), anyInt(), anyString(), anyString()))
                 .thenReturn(new VenueAvailabilityPort.Reservation(
-                        UUID.randomUUID(), event.venueId(), null, 5));
+                        UUID.randomUUID(), event.venueId(), null, 1));
         eventService.transition(event.id(), EventStatus.PUBLISHED, ORGANIZER, CONTEXT, BEARER);
         eventService.transition(event.id(), EventStatus.SALES_OPEN, ORGANIZER, CONTEXT, BEARER);
 
@@ -155,19 +155,19 @@ class InventoryConcurrencyIntegrationTest {
         assertThat(failures.get(0).exception().getCode()).isEqualTo("INSUFFICIENT_TICKET_INVENTORY");
 
         EventApi.InventoryAvailabilityResponse availability = inventoryService.availability(event.id(), ticket.id());
-        assertThat(availability.reservedQuantity()).isEqualTo(4);
-        assertThat(availability.availableQuantity()).isEqualTo(1);
+        assertThat(availability.reservedQuantity()).isEqualTo(1);
+        assertThat(availability.availableQuantity()).isZero();
 
         Outcome winner = successes.get(0);
         EventApi.InventoryReservationResponse replay = inventoryService.reserve(
-                event.id(), ticket.id(), 4, winner.key(), winner.actor());
+                event.id(), ticket.id(), 1, winner.key(), winner.actor());
         assertThat(replay.id()).isEqualTo(winner.response().id());
-        assertThat(replay.remainingQuantity()).isEqualTo(1);
+        assertThat(replay.remainingQuantity()).isZero();
 
         EventApi.InventoryReservationResponse released = inventoryService.release(
                 event.id(), ticket.id(), replay.id(), "release:winner", winner.actor());
         assertThat(released.status().name()).isEqualTo("RELEASED");
-        assertThat(released.remainingQuantity()).isEqualTo(5);
+        assertThat(released.remainingQuantity()).isEqualTo(1);
     }
 
     private Outcome reserveAtOnce(
@@ -180,7 +180,7 @@ class InventoryConcurrencyIntegrationTest {
         ready.countDown();
         start.await();
         try {
-            return new Outcome(key, actor, inventoryService.reserve(eventId, ticketTypeId, 4, key, actor), null);
+            return new Outcome(key, actor, inventoryService.reserve(eventId, ticketTypeId, 1, key, actor), null);
         } catch (EventApiException exception) {
             return new Outcome(key, actor, null, exception);
         }

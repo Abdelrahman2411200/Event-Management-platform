@@ -128,6 +128,7 @@ class EventLifecycleIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/v1/events'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/events/{eventId}/transitions'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/events/{eventId}/ticket-types/{ticketTypeId}/inventory/reservations'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/events/{eventId}/ticket-types/{ticketTypeId}/inventory/reservations/{reservationId}/confirm'].post").exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"));
     }
 
