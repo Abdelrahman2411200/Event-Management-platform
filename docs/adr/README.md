@@ -12,3 +12,4 @@ ADRs record decisions that constrain later implementation phases.
 | [0006](0006-event-inventory-and-venue-assignment.md) | Locked inventory holds, venue API reservations, and event outbox | Accepted |
 | [0007](0007-attendee-booking-ticket-and-check-in.md) | Durable booking commands, authoritative holds, signed tickets, and locked check-in | Accepted |
 | [0008](0008-payment-provider-refunds-and-saga-recovery.md) | Provider-neutral payments, refund policy, and recoverable booking/payment Saga | Accepted |
+| [0009](0009-kafka-failure-and-notification-delivery.md) | Bounded Kafka failure handling and durable notification delivery | Accepted |

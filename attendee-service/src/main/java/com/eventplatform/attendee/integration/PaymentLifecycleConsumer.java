@@ -1,14 +1,84 @@
 package com.eventplatform.attendee.integration;
 
-import com.eventplatform.attendee.api.RequestContext; import com.eventplatform.attendee.application.BookingSagaService; import com.eventplatform.contracts.CorrelationIds; import com.fasterxml.jackson.databind.*;
-import java.math.BigDecimal; import java.time.*; import java.util.*; import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty; import org.springframework.kafka.annotation.KafkaListener; import org.springframework.messaging.handler.annotation.*; import org.springframework.stereotype.Component; import org.springframework.transaction.annotation.Transactional;
+import com.eventplatform.attendee.api.RequestContext;
+import com.eventplatform.attendee.application.BookingSagaService;
+import com.eventplatform.contracts.KafkaEventMetadata;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
-@Component @ConditionalOnProperty(name="platform.integration-events.enabled",havingValue="true",matchIfMissing=true)
+@Component
+@ConditionalOnProperty(name = "platform.integration-events.enabled", havingValue = "true", matchIfMissing = true)
 public class PaymentLifecycleConsumer {
- private static final String PROCESSING="event-platform.payment.processing.v1",SUCCEEDED="event-platform.payment.succeeded.v1",FAILED="event-platform.payment.failed.v1",REFUNDED="event-platform.refund.succeeded.v1";
- private final ProcessedIntegrationEventRepository processed; private final BookingSagaService saga; private final ObjectMapper mapper; private final Clock clock;
- public PaymentLifecycleConsumer(ProcessedIntegrationEventRepository processed,BookingSagaService saga,ObjectMapper mapper,Clock clock){this.processed=processed;this.saga=saga;this.mapper=mapper;this.clock=clock;}
- @KafkaListener(topics="${platform.integration-events.payment-topic:event-platform.payment-lifecycle.v1}",groupId="${spring.kafka.consumer.group-id:attendee-service-v1}") @Transactional
- public void consume(@Payload String payload,@Header("eventId") String eventId,@Header("eventType") String type,@Header(name=CorrelationIds.KAFKA_HEADER,required=false) String correlation,@Header(name=CorrelationIds.TRACEPARENT_HEADER,required=false) String traceparent)throws Exception{UUID id=UUID.fromString(eventId);if(processed.existsById(id))return;JsonNode n=mapper.readTree(payload);RequestContext context=new RequestContext(correlation==null?"kafka:"+id:correlation,traceparent,null);switch(type){case PROCESSING->saga.paymentProcessing(uuid(n,"bookingId"),uuid(n,"paymentId"),uuid(n,"attendeeId"),money(n,"amount"),n.required("currency").asText());case SUCCEEDED->saga.paymentSucceeded(uuid(n,"bookingId"),uuid(n,"paymentId"),uuid(n,"attendeeId"),money(n,"amount"),n.required("currency").asText(),context);case FAILED->saga.paymentFailed(uuid(n,"bookingId"),uuid(n,"paymentId"),uuid(n,"attendeeId"),text(n,"failureCode"),text(n,"failureReason"),context);case REFUNDED->saga.refunded(uuid(n,"bookingId"),uuid(n,"paymentId"),uuid(n,"attendeeId"),money(n,"amount"),n.required("currency").asText(),ids(n.path("ticketIds")),n.path("full").asBoolean(),context);default->{}}processed.save(new ProcessedIntegrationEvent(id,type,clock.instant()));}
- private UUID uuid(JsonNode n,String name){return UUID.fromString(n.required(name).asText());} private BigDecimal money(JsonNode n,String name){return new BigDecimal(n.required(name).asText());} private String text(JsonNode n,String name){return n.path(name).isNull()?null:n.path(name).asText(null);} private List<UUID> ids(JsonNode n){if(!n.isArray())return List.of();List<UUID> result=new ArrayList<>();n.forEach(v->result.add(UUID.fromString(v.asText())));return result;}
+    private static final String PROCESSING = "event-platform.payment.processing.v1";
+    private static final String SUCCEEDED = "event-platform.payment.succeeded.v1";
+    private static final String FAILED = "event-platform.payment.failed.v1";
+    private static final String REFUNDED = "event-platform.refund.succeeded.v1";
+
+    private final ProcessedIntegrationEventRepository processed;
+    private final BookingSagaService saga;
+    private final ObjectMapper mapper;
+    private final Clock clock;
+
+    public PaymentLifecycleConsumer(
+            ProcessedIntegrationEventRepository processed,
+            BookingSagaService saga,
+            ObjectMapper mapper,
+            Clock clock) {
+        this.processed = processed;
+        this.saga = saga;
+        this.mapper = mapper;
+        this.clock = clock;
+    }
+
+    @KafkaListener(
+            topics = "${platform.integration-events.payment-topic:event-platform.payment-lifecycle.v1}",
+            groupId = "${spring.kafka.consumer.group-id:attendee-service-v1}")
+    @Transactional
+    public void consume(ConsumerRecord<String, String> record) throws Exception {
+        KafkaEventMetadata metadata = KafkaEventMetadata.from(record.headers());
+        if (metadata.schemaVersion() != 1) {
+            throw new IllegalArgumentException("Unsupported event schema version " + metadata.schemaVersion());
+        }
+        UUID messageId = metadata.messageId();
+        if (processed.existsById(messageId)) return;
+        JsonNode body = mapper.readTree(record.value());
+        RequestContext context = new RequestContext(metadata.correlationId(), metadata.traceparent(), null);
+        switch (metadata.eventType()) {
+            case PROCESSING -> saga.paymentProcessing(
+                    uuid(body, "bookingId"), uuid(body, "paymentId"), uuid(body, "attendeeId"),
+                    money(body, "amount"), body.required("currency").asText());
+            case SUCCEEDED -> saga.paymentSucceeded(
+                    uuid(body, "bookingId"), uuid(body, "paymentId"), uuid(body, "attendeeId"),
+                    money(body, "amount"), body.required("currency").asText(), context);
+            case FAILED -> saga.paymentFailed(
+                    uuid(body, "bookingId"), uuid(body, "paymentId"), uuid(body, "attendeeId"),
+                    text(body, "failureCode"), text(body, "failureReason"), context);
+            case REFUNDED -> saga.refunded(
+                    uuid(body, "bookingId"), uuid(body, "paymentId"), uuid(body, "attendeeId"),
+                    money(body, "amount"), body.required("currency").asText(), ids(body.path("ticketIds")),
+                    body.path("full").asBoolean(), context);
+            default -> { }
+        }
+        processed.save(new ProcessedIntegrationEvent(messageId, metadata.eventType(), clock.instant()));
+    }
+
+    private UUID uuid(JsonNode node, String name) { return UUID.fromString(node.required(name).asText()); }
+    private BigDecimal money(JsonNode node, String name) { return new BigDecimal(node.required(name).asText()); }
+    private String text(JsonNode node, String name) { return node.path(name).isNull() ? null : node.path(name).asText(null); }
+    private List<UUID> ids(JsonNode node) {
+        if (!node.isArray()) return List.of();
+        List<UUID> result = new ArrayList<>();
+        node.forEach(value -> result.add(UUID.fromString(value.asText())));
+        return result;
+    }
 }

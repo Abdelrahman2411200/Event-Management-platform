@@ -16,6 +16,7 @@ public interface OutboxMessageRepository extends JpaRepository<OutboxMessage, UU
     @Query("""
             select message from OutboxMessage message
             where message.publishedAt is null
+              and message.deadLetteredAt is null
               and message.nextAttemptAt <= :now
             order by message.occurredAt
             """)

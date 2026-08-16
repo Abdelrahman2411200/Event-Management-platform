@@ -2,6 +2,11 @@ name: event-management-platform
 
 x-service-environment: &service-environment
   KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+  KAFKA_CONSUMER_MAX_RETRIES: ${KAFKA_CONSUMER_MAX_RETRIES:-4}
+  KAFKA_CONSUMER_INITIAL_BACKOFF: ${KAFKA_CONSUMER_INITIAL_BACKOFF:-1s}
+  KAFKA_CONSUMER_BACKOFF_MULTIPLIER: ${KAFKA_CONSUMER_BACKOFF_MULTIPLIER:-2.0}
+  KAFKA_CONSUMER_MAX_BACKOFF: ${KAFKA_CONSUMER_MAX_BACKOFF:-30s}
+  KAFKA_DEAD_LETTER_SUFFIX: ${KAFKA_DEAD_LETTER_SUFFIX:-.dlt}
   OTEL_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
   TRACING_SAMPLING_PROBABILITY: "1.0"
 
@@ -196,6 +201,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       EVENT_OUTBOX_ENABLED: ${EVENT_OUTBOX_ENABLED:-true}
+      EVENT_OUTBOX_MAX_ATTEMPTS: ${EVENT_OUTBOX_MAX_ATTEMPTS:-10}
       EVENT_LIFECYCLE_TOPIC: ${EVENT_LIFECYCLE_TOPIC:-event-platform.event-lifecycle.v1}
       ATTENDEE_LIFECYCLE_TOPIC: ${ATTENDEE_LIFECYCLE_TOPIC:-event-platform.attendee-lifecycle.v1}
       EVENT_SAGA_CONSUMER_ENABLED: ${EVENT_SAGA_CONSUMER_ENABLED:-true}
@@ -262,6 +268,7 @@ services:
       TICKET_QR_SIGNING_SECRET: ${TICKET_QR_SIGNING_SECRET:-}
       TICKET_QR_ALLOW_EPHEMERAL_KEY: ${TICKET_QR_ALLOW_EPHEMERAL_KEY:-true}
       ATTENDEE_OUTBOX_ENABLED: ${ATTENDEE_OUTBOX_ENABLED:-true}
+      ATTENDEE_OUTBOX_MAX_ATTEMPTS: ${ATTENDEE_OUTBOX_MAX_ATTEMPTS:-10}
       ATTENDEE_LIFECYCLE_TOPIC: ${ATTENDEE_LIFECYCLE_TOPIC:-event-platform.attendee-lifecycle.v1}
       ATTENDEE_EVENT_CONSUMER_ENABLED: ${ATTENDEE_EVENT_CONSUMER_ENABLED:-true}
       ATTENDEE_HOLD_EXPIRY_INTERVAL: ${ATTENDEE_HOLD_EXPIRY_INTERVAL:-30s}
@@ -296,8 +303,9 @@ services:
       DATABASE_PASSWORD: local_dev_only
       PAYMENT_PROVIDER: fake
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-local-fake-webhook-secret-change-me}
-      PAYMENT_EVENTS_TOPIC: event-platform.payment-lifecycle.v1
-      ATTENDEE_EVENTS_TOPIC: event-platform.attendee-lifecycle.v1
+      PAYMENT_EVENTS_TOPIC: ${PAYMENT_EVENTS_TOPIC:-event-platform.payment-lifecycle.v1}
+      ATTENDEE_EVENTS_TOPIC: ${ATTENDEE_LIFECYCLE_TOPIC:-event-platform.attendee-lifecycle.v1}
+      PAYMENT_OUTBOX_MAX_ATTEMPTS: ${PAYMENT_OUTBOX_MAX_ATTEMPTS:-10}
       JWT_JWK_SET_URI: http://auth-service:8081/api/v1/auth/.well-known/jwks.json
       JWT_ISSUER: ${JWT_ISSUER:-urn:event-platform:auth}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-event-platform-api}
@@ -323,12 +331,26 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/notification_service
       DATABASE_USERNAME: notification_service
       DATABASE_PASSWORD: local_dev_only
+      JWT_JWK_SET_URI: http://auth-service:8081/api/v1/auth/.well-known/jwks.json
+      JWT_ISSUER: ${JWT_ISSUER:-urn:event-platform:auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-event-platform-api}
+      EVENT_LIFECYCLE_TOPIC: ${EVENT_LIFECYCLE_TOPIC:-event-platform.event-lifecycle.v1}
+      ATTENDEE_LIFECYCLE_TOPIC: ${ATTENDEE_LIFECYCLE_TOPIC:-event-platform.attendee-lifecycle.v1}
+      PAYMENT_LIFECYCLE_TOPIC: ${PAYMENT_EVENTS_TOPIC:-event-platform.payment-lifecycle.v1}
+      NOTIFICATION_EMAIL_PROVIDER: ${NOTIFICATION_EMAIL_PROVIDER:-local}
+      NOTIFICATION_SMS_PROVIDER: ${NOTIFICATION_SMS_PROVIDER:-local}
+      NOTIFICATION_REMINDER_LEAD: ${NOTIFICATION_REMINDER_LEAD:-24h}
+      NOTIFICATION_DELIVERY_MAX_ATTEMPTS: ${NOTIFICATION_DELIVERY_MAX_ATTEMPTS:-5}
+      NOTIFICATION_DELIVERY_BATCH_SIZE: ${NOTIFICATION_DELIVERY_BATCH_SIZE:-50}
+      NOTIFICATION_DELIVERY_INTERVAL: ${NOTIFICATION_DELIVERY_INTERVAL:-1s}
     ports:
       - "8086:8086"
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      auth-service:
         condition: service_healthy
     networks: [platform]
 

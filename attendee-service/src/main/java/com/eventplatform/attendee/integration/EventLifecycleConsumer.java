@@ -3,15 +3,14 @@ package com.eventplatform.attendee.integration;
 import com.eventplatform.attendee.api.RequestContext;
 import com.eventplatform.attendee.application.BookingPersistenceService;
 import com.eventplatform.attendee.application.BookingSagaService;
-import com.eventplatform.contracts.CorrelationIds;
+import com.eventplatform.contracts.KafkaEventMetadata;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.util.UUID;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,18 +45,16 @@ public class EventLifecycleConsumer {
             topics = "${platform.integration-events.event-topic:event-platform.event-lifecycle.v1}",
             groupId = "${spring.kafka.consumer.group-id:attendee-service-v1}")
     @Transactional
-    public void consume(
-            @Payload String payload,
-            @Header("eventId") String messageId,
-            @Header("eventType") String eventType,
-            @Header(name = CorrelationIds.KAFKA_HEADER, required = false) String correlationId,
-            @Header(name = CorrelationIds.TRACEPARENT_HEADER, required = false) String traceparent) throws Exception {
-        UUID eventMessageId = UUID.fromString(messageId);
+    public void consume(ConsumerRecord<String, String> record) throws Exception {
+        KafkaEventMetadata metadata = KafkaEventMetadata.from(record.headers());
+        requireV1(metadata);
+        UUID eventMessageId = metadata.messageId();
+        String eventType = metadata.eventType();
         if (processedRepository.existsById(eventMessageId)) return;
-        JsonNode body = objectMapper.readTree(payload);
+        JsonNode body = objectMapper.readTree(record.value());
         RequestContext context = new RequestContext(
-                correlationId == null ? "kafka:" + eventMessageId : correlationId,
-                traceparent,
+                metadata.correlationId(),
+                metadata.traceparent(),
                 null);
         if (INVENTORY_EXPIRED.equals(eventType)) {
             sagaService.inventoryUnavailable(UUID.fromString(body.required("reservationId").asText()),
@@ -72,5 +69,11 @@ public class EventLifecycleConsumer {
             persistenceService.cancelEvent(UUID.fromString(body.required("eventId").asText()), context);
         }
         processedRepository.save(new ProcessedIntegrationEvent(eventMessageId, eventType, clock.instant()));
+    }
+
+    private void requireV1(KafkaEventMetadata metadata) {
+        if (metadata.schemaVersion() != 1) {
+            throw new IllegalArgumentException("Unsupported event schema version " + metadata.schemaVersion());
+        }
     }
 }

@@ -27,6 +27,8 @@ spring:
       time-to-live: ${PUBLIC_EVENT_CACHE_TTL:5m}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    listener:
+      ack-mode: record
 platform:
   security:
     jwt:
@@ -47,6 +49,14 @@ platform:
     topic: ${EVENT_LIFECYCLE_TOPIC:event-platform.event-lifecycle.v1}
     batch-size: ${EVENT_OUTBOX_BATCH_SIZE:50}
     publish-interval: ${EVENT_OUTBOX_PUBLISH_INTERVAL:1s}
+    max-attempts: ${EVENT_OUTBOX_MAX_ATTEMPTS:10}
+  kafka:
+    reliability:
+      max-retries: ${KAFKA_CONSUMER_MAX_RETRIES:4}
+      initial-backoff: ${KAFKA_CONSUMER_INITIAL_BACKOFF:1s}
+      multiplier: ${KAFKA_CONSUMER_BACKOFF_MULTIPLIER:2.0}
+      max-backoff: ${KAFKA_CONSUMER_MAX_BACKOFF:30s}
+      dead-letter-suffix: ${KAFKA_DEAD_LETTER_SUFFIX:.dlt}
   metadata:
     description: Event lifecycle, public discovery, ticket products, and inventory boundary
     version: ${APP_VERSION:@project.version@}

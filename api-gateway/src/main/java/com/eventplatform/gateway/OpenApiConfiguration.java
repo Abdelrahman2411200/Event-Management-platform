@@ -142,6 +142,13 @@ public class OpenApiConfiguration {
                 .post(idempotent(pathParameters(operation("Request an authorized full or partial refund", "200", true, "Refunds"), "paymentId"))));
         paths.addPathItem("/api/v1/payments/webhooks/{provider}", new PathItem()
                 .post(pathParameters(operation("Consume a provider-signed webhook", "200", false, "Payment webhooks"), "provider")));
+        paths.addPathItem("/api/v1/notifications", new PathItem()
+                .get(operation("List owned notification delivery status", "200", true, "Notifications")));
+        paths.addPathItem("/api/v1/notifications/preferences", new PathItem()
+                .get(operation("Read notification preferences", "200", true, "Notifications"))
+                .put(operation("Update optional reminder and SMS preferences", "200", true, "Notifications")));
+        paths.addPathItem("/api/v1/notifications/local-deliveries", new PathItem()
+                .get(operation("Inspect local delivery adapter output (ADMIN)", "200", true, "Notifications")));
         return paths;
     }
 

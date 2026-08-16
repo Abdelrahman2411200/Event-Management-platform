@@ -23,9 +23,11 @@ public final class AttendeeLifecycleEvents {
     }
 
     public record BookingCreatedV1(
-            UUID bookingId, UUID attendeeId, UUID eventId, UUID ticketTypeId,
+            UUID bookingId, UUID attendeeId, String attendeeEmail, String attendeePhone,
+            String attendeeLocale, String attendeeDisplayName, UUID eventId, UUID ticketTypeId,
             UUID inventoryReservationId, int quantity, BigDecimal totalAmount,
-            String currency, BookingStatus status, Instant holdExpiresAt, Instant occurredAt) {
+            String currency, BookingStatus status, String eventTitle, String ticketTypeName,
+            Instant eventStartsAt, Instant holdExpiresAt, Instant occurredAt) {
     }
 
     public record TicketHoldExpiredV1(
@@ -35,7 +37,9 @@ public final class AttendeeLifecycleEvents {
 
     public record TicketIssuedV1(
             UUID ticketId, UUID bookingId, UUID attendeeId, UUID eventId,
-            UUID ticketTypeId, Instant issuedAt) {
+            UUID ticketTypeId, String eventTitle, String ticketTypeName, Instant eventStartsAt,
+            String attendeeEmail, String attendeePhone, String attendeeLocale,
+            String qrToken, Instant issuedAt) {
     }
 
     public record TicketCheckedInV1(
@@ -47,6 +51,7 @@ public final class AttendeeLifecycleEvents {
             UUID bookingId, UUID attendeeId, UUID eventId, UUID eventOrganizerId,
             UUID inventoryReservationId, UUID ticketTypeId, int quantity,
             BigDecimal unitPrice, BigDecimal totalAmount, String currency,
+            String eventTitle, String attendeeEmail, String attendeePhone, String attendeeLocale,
             Instant eventStartsAt, Instant holdExpiresAt, Instant occurredAt) {
     }
 

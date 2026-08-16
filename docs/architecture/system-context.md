@@ -31,7 +31,7 @@ flowchart TB
     Payments -->|transactional outbox| Kafka
     Kafka -->|booking orders, tickets, compensation| Payments
     Kafka -->|inventory Saga commands| Events
-    Notifications -. future events .-> Kafka
+    Kafka -->|booking, payment, ticket, event, refund events| Notifications
 
     Services[Gateway and services] --> OTel[OpenTelemetry Collector]
     OTel --> Jaeger[Jaeger]
@@ -53,7 +53,7 @@ PostgreSQL databases are separate logical databases in one local container to ke
 | `venue-service` | Venues, rooms, capacity, location metadata, availability blocks, event assignment reservations, and maps adapter boundary | Event lifecycle or ticket inventory |
 | `attendee-service` | Attendee profiles, registrations, booking commands/process state, ticket-hold projections, signed tickets, scan audit, check-in, and lifecycle outbox | Payment transactions, event entities, or authoritative ticket inventory |
 | `payment-service` | Booking-payment projections, provider-neutral payments/attempts, transaction history, refunds, signed webhook deduplication, reconciliation, ticket projections, and lifecycle outbox | Booking, attendee, event, or inventory entities |
-| `notification-service` | Future notification requests, templates, delivery attempts, and provider results | Source domain records from other services |
+| `notification-service` | Recipient/preferences projections, templates, durable intents/attempts, restart-safe reminders, and provider adapters | Authoritative users, bookings, events, tickets, payments, or provider credentials |
 | `frontend` | Browser presentation and interaction | Business authority or secrets |
 
 References to another service's concepts are scalar identifiers and immutable snapshots only. They never become cross-service JPA relationships.
@@ -79,6 +79,8 @@ Every network call has a timeout. Retries are allowed only for operations known 
 Any future transaction that changes service-owned state and must publish a Kafka event will write both the domain change and an outbox row in the same local database transaction. A relay publishes the outbox record and marks it published. At-least-once delivery is assumed, so consumers must be idempotent. Publishing directly after a database commit is not considered reliable enough.
 
 Event-service, attendee-service, and payment-service now own outboxes for their state changes. Each relay marks rows only after Kafka acknowledgement.
+
+Phase 6 bounds relay publication attempts and retains exhausted rows with `dead_lettered_at`. Consumers use bounded exponential retry followed by a source-topic `.dlt`; notification-service consumes the three lifecycle topics and commits its intent plus processed message ID before record acknowledgement.
 
 ## Booking and payment Saga
 

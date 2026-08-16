@@ -6,8 +6,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import com.eventplatform.kafka.OutboxRetryPolicy;
 
 @Entity
 @Table(name = "outbox_messages")
@@ -52,6 +52,9 @@ public class OutboxMessage {
     @Column(name = "last_error", length = 500)
     private String lastError;
 
+    @Column(name = "dead_lettered_at")
+    private Instant deadLetteredAt;
+
     @Version
     private long version;
 
@@ -86,11 +89,14 @@ public class OutboxMessage {
         lastError = null;
     }
 
-    public void markFailed(String error, Instant now) {
+    public void markFailed(String error, Instant now, int maxAttempts) {
         publishAttempts++;
-        long delaySeconds = Math.min(60, 1L << Math.min(publishAttempts, 5));
-        nextAttemptAt = now.plus(delaySeconds, ChronoUnit.SECONDS);
-        lastError = error == null ? "Kafka publication failed" : error.substring(0, Math.min(error.length(), 500));
+        lastError = OutboxRetryPolicy.safeError(error);
+        if (publishAttempts >= maxAttempts) {
+            deadLetteredAt = now;
+        } else {
+            nextAttemptAt = OutboxRetryPolicy.nextAttempt(now, publishAttempts);
+        }
     }
 
     public UUID getId() {
@@ -99,6 +105,10 @@ public class OutboxMessage {
 
     public UUID getAggregateId() {
         return aggregateId;
+    }
+
+    public String getAggregateType() {
+        return aggregateType;
     }
 
     public String getEventType() {
@@ -123,5 +133,13 @@ public class OutboxMessage {
 
     public Instant getOccurredAt() {
         return occurredAt;
+    }
+
+    public int getPublishAttempts() {
+        return publishAttempts;
+    }
+
+    public boolean isDeadLettered() {
+        return deadLetteredAt != null;
     }
 }

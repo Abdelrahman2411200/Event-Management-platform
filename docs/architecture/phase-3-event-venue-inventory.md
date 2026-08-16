@@ -101,7 +101,7 @@ Anonymous clients may read only:
 
 ## Reliable lifecycle events
 
-Event and ticket changes write an event-service-owned outbox row in the same transaction. The relay publishes to `event-platform.event-lifecycle.v1` and marks rows published only after Kafka acknowledges them. A crash between acknowledgement and the database mark can duplicate a message, so consumers must deduplicate by the `eventId` Kafka header.
+Event and ticket changes write an event-service-owned outbox row in the same transaction. The relay publishes to `event-platform.event-lifecycle.v1` and marks rows published only after Kafka acknowledges them. A crash between acknowledgement and the database mark can duplicate a message, so consumers deduplicate by canonical `messageId` (`eventId` remains a rolling-upgrade alias).
 
 Version 1 contracts are:
 
@@ -110,7 +110,7 @@ Version 1 contracts are:
 - `event-platform.event.cancelled.v1`;
 - `event-platform.ticket-type.changed.v1`.
 
-Headers follow the platform convention: `eventId`, `eventType`, `eventVersion`, `occurredAt`, `producer`, `correlationId`, and optional `traceparent`. No application transaction writes Kafka directly.
+Headers follow the canonical platform convention documented in the [Kafka event catalog](kafka-event-catalog.md), including `messageId`, `eventType`, `schemaVersion`, occurrence/correlation/trace metadata, producer, and aggregate identity. No application transaction writes Kafka directly.
 
 ## Example requests
 

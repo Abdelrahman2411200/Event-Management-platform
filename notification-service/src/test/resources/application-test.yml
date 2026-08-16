@@ -6,6 +6,20 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+  task:
+    scheduling:
+      enabled: false
 management:
   tracing:
     enabled: false
+platform:
+  integration-events:
+    enabled: false
+  notification:
+    reminder-lead: 24h
+    delivery-max-attempts: 3
+  security:
+    jwt:
+      issuer: urn:event-platform:auth
+      audience: event-platform-api
+      jwk-set-uri: http://localhost:0/jwks

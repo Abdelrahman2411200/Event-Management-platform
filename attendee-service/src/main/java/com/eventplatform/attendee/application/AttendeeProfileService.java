@@ -20,11 +20,16 @@ public class AttendeeProfileService {
         this.clock = clock;
     }
 
+    @Transactional
     public AttendeeProfile ensure(AuthenticatedActor actor) {
         AttendeeProfile existing = repository.findById(actor.userId()).orElse(null);
-        if (existing != null) return existing;
+        if (existing != null) {
+            existing.synchronizeIdentity(actor.email(), clock.instant());
+            return existing;
+        }
         try {
-            return repository.saveAndFlush(new AttendeeProfile(actor.userId(), null, null, "en", clock.instant()));
+            return repository.saveAndFlush(new AttendeeProfile(
+                    actor.userId(), actor.email(), null, null, "en", clock.instant()));
         } catch (DataIntegrityViolationException exception) {
             return repository.findById(actor.userId()).orElseThrow(() -> exception);
         }

@@ -17,6 +17,11 @@
     <dependencies>
         <dependency>
             <groupId>com.eventplatform</groupId>
+            <artifactId>platform-kafka</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.eventplatform</groupId>
             <artifactId>platform-web</artifactId>
             <version>${project.version}</version>
         </dependency>

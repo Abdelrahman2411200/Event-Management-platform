@@ -94,7 +94,7 @@ Business-critical publications use a local transactional outbox. Attendee-servic
 - `event-platform.ticket.issued.v1`;
 - `event-platform.ticket.checked-in.v1`.
 
-Event-service adds `inventory.held`, `inventory.confirmed`, `inventory.released`, and `inventory.expired` version 1 events to its existing lifecycle topic. Headers retain the platform `eventId`, `eventType`, `eventVersion`, `occurredAt`, `producer`, `correlationId`, and optional `traceparent` convention. Attendee-service records processed event IDs atomically with state changes because delivery is at least once.
+Event-service adds `inventory.held`, `inventory.confirmed`, `inventory.released`, and `inventory.expired` version 1 events to its existing lifecycle topic. Headers use canonical `messageId`, `eventType`, `schemaVersion`, occurrence/correlation/trace metadata, producer, and aggregate identity while retaining Phase 5 aliases during rolling upgrades. Attendee-service records processed message IDs atomically with state changes because delivery is at least once.
 
 ## Example
 
