@@ -253,9 +253,24 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/attendee_service
       DATABASE_USERNAME: attendee_service
       DATABASE_PASSWORD: local_dev_only
+      AUTH_JWK_SET_URI: http://auth-service:8081/api/v1/auth/.well-known/jwks.json
+      JWT_ISSUER: ${JWT_ISSUER:-urn:event-platform:auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-event-platform-api}
+      EVENT_SERVICE_URL: http://event-service:8082
+      TICKET_QR_SIGNING_SECRET: ${TICKET_QR_SIGNING_SECRET:-}
+      TICKET_QR_ALLOW_EPHEMERAL_KEY: ${TICKET_QR_ALLOW_EPHEMERAL_KEY:-true}
+      ATTENDEE_OUTBOX_ENABLED: ${ATTENDEE_OUTBOX_ENABLED:-true}
+      ATTENDEE_LIFECYCLE_TOPIC: ${ATTENDEE_LIFECYCLE_TOPIC:-event-platform.attendee-lifecycle.v1}
+      ATTENDEE_EVENT_CONSUMER_ENABLED: ${ATTENDEE_EVENT_CONSUMER_ENABLED:-true}
+      ATTENDEE_HOLD_EXPIRY_INTERVAL: ${ATTENDEE_HOLD_EXPIRY_INTERVAL:-30s}
+      EVENT_LIFECYCLE_TOPIC: ${EVENT_LIFECYCLE_TOPIC:-event-platform.event-lifecycle.v1}
     ports:
       - "8084:8084"
     depends_on:
+      auth-service:
+        condition: service_healthy
+      event-service:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       kafka:

@@ -79,6 +79,11 @@ public class OpenApiConfiguration {
                 new PathItem().post(idempotent(pathParameters(
                         operation("Release an inventory hold", "200", true, "Ticket inventory"),
                         "eventId", "ticketTypeId", "reservationId"))));
+        paths.addPathItem(
+                "/api/v1/events/{eventId}/ticket-types/{ticketTypeId}/inventory/reservations/{reservationId}/confirm",
+                new PathItem().post(idempotent(pathParameters(
+                        operation("Confirm an inventory hold", "200", true, "Ticket inventory"),
+                        "eventId", "ticketTypeId", "reservationId"))));
         paths.addPathItem("/api/v1/event-categories", new PathItem()
                 .get(operation("List public event categories", "200", false, "Events"))
                 .post(operation("Create an event category (ADMIN)", "201", true, "Events")));
@@ -110,6 +115,20 @@ public class OpenApiConfiguration {
                 .delete(pathParameters(
                         operation("Release an event venue assignment", "200", true, "Venues"),
                         "venueId", "reservationId")));
+        paths.addPathItem("/api/v1/attendees/me", new PathItem()
+                .get(operation("Read the attendee profile", "200", true, "Attendees"))
+                .put(operation("Create or update the attendee profile", "200", true, "Attendees")));
+        paths.addPathItem("/api/v1/attendees/me/tickets", new PathItem()
+                .get(operation("Read owned current or historical tickets", "200", true, "Tickets")));
+        paths.addPathItem("/api/v1/bookings", new PathItem()
+                .get(operation("Read owned booking history", "200", true, "Bookings"))
+                .post(idempotent(operation("Create an inventory-backed booking", "201", true, "Bookings"))));
+        paths.addPathItem("/api/v1/bookings/{bookingId}", new PathItem()
+                .get(pathParameters(operation("Read one owned booking", "200", true, "Bookings"), "bookingId")));
+        paths.addPathItem("/api/v1/tickets/validate", new PathItem()
+                .post(idempotent(operation("Validate a signed QR ticket", "200", true, "Check-in"))));
+        paths.addPathItem("/api/v1/check-ins", new PathItem()
+                .post(idempotent(operation("Check in an issued ticket once", "201", true, "Check-in"))));
         return paths;
     }
 

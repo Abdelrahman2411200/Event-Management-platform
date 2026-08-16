@@ -15,7 +15,7 @@ public class EventOpenApiConfiguration {
         return new OpenAPI()
                 .info(new Info()
                         .title("event-service")
-                        .description("Event lifecycle, categories, public discovery, ticket products, and inventory API")
+                        .description("Event lifecycle, categories, public discovery, ticket products, and concurrency-safe inventory hold API")
                         .version("v1"))
                 .components(new Components().addSecuritySchemes(
                         "bearerAuth",

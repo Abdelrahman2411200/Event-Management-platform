@@ -1,6 +1,7 @@
 package com.eventplatform.event.integration;
 
 import com.eventplatform.event.domain.EventStatus;
+import com.eventplatform.event.domain.InventoryReservationStatus;
 import com.eventplatform.event.domain.TicketTypeStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -13,6 +14,10 @@ public final class EventLifecycleEvents {
     public static final String EVENT_UPDATED = "event-platform.event.updated.v1";
     public static final String EVENT_CANCELLED = "event-platform.event.cancelled.v1";
     public static final String TICKET_TYPE_CHANGED = "event-platform.ticket-type.changed.v1";
+    public static final String INVENTORY_HELD = "event-platform.inventory.held.v1";
+    public static final String INVENTORY_CONFIRMED = "event-platform.inventory.confirmed.v1";
+    public static final String INVENTORY_RELEASED = "event-platform.inventory.released.v1";
+    public static final String INVENTORY_EXPIRED = "event-platform.inventory.expired.v1";
 
     private EventLifecycleEvents() {
     }
@@ -60,6 +65,17 @@ public final class EventLifecycleEvents {
             Instant salesStart,
             Instant salesEnd,
             TicketTypeStatus status,
+            Instant occurredAt) {
+    }
+
+    public record InventoryReservationChangedV1(
+            UUID reservationId,
+            UUID eventId,
+            UUID ticketTypeId,
+            UUID requesterId,
+            int quantity,
+            InventoryReservationStatus status,
+            Instant expiresAt,
             Instant occurredAt) {
     }
 }

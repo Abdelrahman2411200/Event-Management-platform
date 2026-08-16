@@ -2,6 +2,7 @@ package com.eventplatform.event.application;
 
 import com.eventplatform.event.api.EventApi;
 import com.eventplatform.event.api.EventApiException;
+import com.eventplatform.event.api.RequestContext;
 import com.eventplatform.event.domain.EventStatus;
 import com.eventplatform.event.domain.InventoryReservation;
 import com.eventplatform.event.domain.InventoryReservationRepository;
@@ -10,7 +11,10 @@ import com.eventplatform.event.domain.ManagedEvent;
 import com.eventplatform.event.domain.ManagedEventRepository;
 import com.eventplatform.event.domain.TicketType;
 import com.eventplatform.event.domain.TicketTypeRepository;
+import com.eventplatform.event.integration.EventLifecycleEvents;
+import com.eventplatform.event.outbox.TransactionalOutbox;
 import com.eventplatform.event.security.AuthenticatedActor;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +31,8 @@ public class InventoryService {
     private final TicketTypeRepository ticketRepository;
     private final InventoryReservationRepository reservationRepository;
     private final PublicEventCache cache;
+    private final TransactionalOutbox outbox;
+    private final Clock clock;
     private final Duration holdTtl;
 
     public InventoryService(
@@ -34,11 +40,15 @@ public class InventoryService {
             TicketTypeRepository ticketRepository,
             InventoryReservationRepository reservationRepository,
             PublicEventCache cache,
+            TransactionalOutbox outbox,
+            Clock clock,
             @Value("${platform.inventory.hold-ttl:15m}") Duration holdTtl) {
         this.eventRepository = eventRepository;
         this.ticketRepository = ticketRepository;
         this.reservationRepository = reservationRepository;
         this.cache = cache;
+        this.outbox = outbox;
+        this.clock = clock;
         this.holdTtl = holdTtl;
         if (holdTtl.compareTo(Duration.ofMinutes(1)) < 0 || holdTtl.compareTo(Duration.ofHours(2)) > 0) {
             throw new IllegalArgumentException("Inventory hold TTL must be between 1 minute and 2 hours");
@@ -49,10 +59,11 @@ public class InventoryService {
     public EventApi.InventoryAvailabilityResponse availability(UUID eventId, UUID ticketTypeId) {
         ManagedEvent event = requiredEvent(eventId);
         TicketType ticket = requiredTicketForUpdate(eventId, ticketTypeId);
-        if (expireForTicket(ticket, Instant.now())) {
+        Instant availabilityTime = clock.instant();
+        if (expireForTicket(ticket, availabilityTime)) {
             cache.evict(eventId);
         }
-        return availabilityResponse(event, ticket, Instant.now());
+        return availabilityResponse(event, ticket, availabilityTime);
     }
 
     @Transactional
@@ -62,15 +73,26 @@ public class InventoryService {
             int quantity,
             String idempotencyKey,
             AuthenticatedActor actor) {
+        return reserve(
+                eventId,
+                ticketTypeId,
+                quantity,
+                idempotencyKey,
+                actor,
+                systemContext("inventory-reserve", idempotencyKey));
+    }
+
+    @Transactional
+    public EventApi.InventoryReservationResponse reserve(
+            UUID eventId,
+            UUID ticketTypeId,
+            int quantity,
+            String idempotencyKey,
+            AuthenticatedActor actor,
+        RequestContext requestContext) {
         ManagedEvent event = requiredEvent(eventId);
-        if (event.getStatus() != EventStatus.SALES_OPEN) {
-            throw new EventApiException(
-                    HttpStatus.CONFLICT,
-                    "EVENT_SALES_NOT_OPEN",
-                    "Ticket inventory can be reserved only while event sales are open");
-        }
         TicketType ticket = requiredTicketForUpdate(eventId, ticketTypeId);
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         boolean expired = expireForTicket(ticket, now);
 
         InventoryReservation existing = reservationRepository.findByReserveIdempotencyKey(idempotencyKey).orElse(null);
@@ -84,7 +106,13 @@ public class InventoryService {
             if (expired) {
                 cache.evict(eventId);
             }
-            return reservationResponse(existing, ticket);
+            return reservationResponse(existing, event, ticket);
+        }
+        if (event.getStatus() != EventStatus.SALES_OPEN) {
+            throw new EventApiException(
+                    HttpStatus.CONFLICT,
+                    "EVENT_SALES_NOT_OPEN",
+                    "Ticket inventory can be reserved only while event sales are open");
         }
         if (!ticket.isOnSale(now)) {
             throw new EventApiException(
@@ -115,8 +143,13 @@ public class InventoryService {
                 now.plus(holdTtl),
                 now);
         reservationRepository.save(reservation);
+        appendInventoryEvent(
+                EventLifecycleEvents.INVENTORY_HELD,
+                reservation,
+                requestContext,
+                now);
         cache.evict(eventId);
-        return reservationResponse(reservation, ticket);
+        return reservationResponse(reservation, event, ticket);
     }
 
     @Transactional
@@ -126,6 +159,23 @@ public class InventoryService {
             UUID reservationId,
             String idempotencyKey,
             AuthenticatedActor actor) {
+        return release(
+                eventId,
+                ticketTypeId,
+                reservationId,
+                idempotencyKey,
+                actor,
+                systemContext("inventory-release", idempotencyKey));
+    }
+
+    @Transactional
+    public EventApi.InventoryReservationResponse release(
+            UUID eventId,
+            UUID ticketTypeId,
+            UUID reservationId,
+            String idempotencyKey,
+            AuthenticatedActor actor,
+            RequestContext requestContext) {
         InventoryReservation keyOwner = reservationRepository.findByReleaseIdempotencyKey(idempotencyKey).orElse(null);
         if (keyOwner != null && !keyOwner.getId().equals(reservationId)) {
             throw new EventApiException(
@@ -134,7 +184,7 @@ public class InventoryService {
                     "Idempotency-Key was already used for another inventory release");
         }
         TicketType ticket = requiredTicketForUpdate(eventId, ticketTypeId);
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         expireForTicket(ticket, now);
         InventoryReservation reservation = reservationRepository.findByIdForUpdate(reservationId)
                 .filter(candidate -> candidate.getEventId().equals(eventId)
@@ -149,12 +199,83 @@ public class InventoryService {
                     "INVENTORY_RESERVATION_OWNERSHIP_REQUIRED",
                     "Only the reservation requester or an administrator may release this inventory");
         }
+        if (reservation.getStatus() == InventoryReservationStatus.CONFIRMED) {
+            throw new EventApiException(
+                    HttpStatus.CONFLICT,
+                    "INVENTORY_RESERVATION_CONFIRMED",
+                    "Confirmed inventory cannot be released by the hold-release operation");
+        }
         if (reservation.getStatus() == InventoryReservationStatus.ACTIVE) {
             ticket.release(reservation.getQuantity(), now);
+            reservation.release(idempotencyKey, now);
+            appendInventoryEvent(
+                    EventLifecycleEvents.INVENTORY_RELEASED,
+                    reservation,
+                    requestContext,
+                    now);
+        } else {
+            reservation.release(idempotencyKey, now);
         }
-        reservation.release(idempotencyKey, now);
         cache.evict(eventId);
-        return reservationResponse(reservation, ticket);
+        return reservationResponse(reservation, requiredEvent(eventId), ticket);
+    }
+
+    @Transactional
+    public EventApi.InventoryReservationResponse confirm(
+            UUID eventId,
+            UUID ticketTypeId,
+            UUID reservationId,
+            String idempotencyKey,
+            AuthenticatedActor actor,
+            RequestContext requestContext) {
+        InventoryReservation keyOwner = reservationRepository
+                .findByConfirmationIdempotencyKey(idempotencyKey)
+                .orElse(null);
+        if (keyOwner != null && !keyOwner.getId().equals(reservationId)) {
+            throw new EventApiException(
+                    HttpStatus.CONFLICT,
+                    "IDEMPOTENCY_KEY_REUSED",
+                    "Idempotency-Key was already used for another inventory confirmation");
+        }
+        TicketType ticket = requiredTicketForUpdate(eventId, ticketTypeId);
+        Instant now = clock.instant();
+        expireForTicket(ticket, now);
+        InventoryReservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .filter(candidate -> candidate.getEventId().equals(eventId)
+                        && candidate.getTicketTypeId().equals(ticketTypeId))
+                .orElseThrow(() -> new EventApiException(
+                        HttpStatus.NOT_FOUND,
+                        "INVENTORY_RESERVATION_NOT_FOUND",
+                        "The inventory reservation was not found"));
+        if (!actor.isAdmin() && !reservation.getRequesterId().equals(actor.userId())) {
+            throw new EventApiException(
+                    HttpStatus.FORBIDDEN,
+                    "INVENTORY_RESERVATION_OWNERSHIP_REQUIRED",
+                    "Only the reservation requester or an administrator may confirm this inventory");
+        }
+        if (reservation.getStatus() == InventoryReservationStatus.CONFIRMED) {
+            if (!idempotencyKey.equals(reservation.getConfirmationIdempotencyKey())) {
+                throw new EventApiException(
+                        HttpStatus.CONFLICT,
+                        "INVENTORY_ALREADY_CONFIRMED",
+                        "The inventory reservation was already confirmed by another command");
+            }
+            return reservationResponse(reservation, requiredEvent(eventId), ticket);
+        }
+        if (reservation.getStatus() != InventoryReservationStatus.ACTIVE) {
+            throw new EventApiException(
+                    HttpStatus.CONFLICT,
+                    "INVENTORY_RESERVATION_NOT_ACTIVE",
+                    "Only an active, unexpired inventory reservation can be confirmed");
+        }
+        reservation.confirm(idempotencyKey, now);
+        appendInventoryEvent(
+                EventLifecycleEvents.INVENTORY_CONFIRMED,
+                reservation,
+                requestContext,
+                now);
+        cache.evict(eventId);
+        return reservationResponse(reservation, requiredEvent(eventId), ticket);
     }
 
     @Transactional
@@ -170,12 +291,17 @@ public class InventoryService {
             return;
         }
         InventoryReservation reservation = reservationRepository.findByIdForUpdate(reservationId).orElse(null);
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         if (reservation != null
                 && reservation.getStatus() == InventoryReservationStatus.ACTIVE
                 && !reservation.getExpiresAt().isAfter(now)) {
             ticket.release(reservation.getQuantity(), now);
             reservation.expire(now);
+            appendInventoryEvent(
+                    EventLifecycleEvents.INVENTORY_EXPIRED,
+                    reservation,
+                    systemContext("inventory-expiry", reservation.getId().toString()),
+                    now);
             cache.evict(reservation.getEventId());
         }
     }
@@ -185,6 +311,11 @@ public class InventoryService {
         for (InventoryReservation reservation : expired) {
             ticket.release(reservation.getQuantity(), now);
             reservation.expire(now);
+            appendInventoryEvent(
+                    EventLifecycleEvents.INVENTORY_EXPIRED,
+                    reservation,
+                    systemContext("inventory-expiry", reservation.getId().toString()),
+                    now);
         }
         return !expired.isEmpty();
     }
@@ -219,17 +350,57 @@ public class InventoryService {
 
     private EventApi.InventoryReservationResponse reservationResponse(
             InventoryReservation reservation,
+            ManagedEvent event,
             TicketType ticket) {
         return new EventApi.InventoryReservationResponse(
                 reservation.getId(),
                 reservation.getEventId(),
+                event.getOrganizerId(),
+                event.getTitle(),
+                event.getStartsAt(),
+                event.getEndsAt(),
+                event.getVenueId(),
+                event.getVenueSpaceId(),
                 reservation.getTicketTypeId(),
+                ticket.getName(),
+                ticket.getPrice(),
+                ticket.getCurrency(),
                 reservation.getRequesterId(),
                 reservation.getQuantity(),
                 reservation.getStatus(),
                 reservation.getExpiresAt(),
+                reservation.getConfirmedAt(),
                 ticket.availableQuantity(),
                 reservation.getCreatedAt(),
                 reservation.getUpdatedAt());
+    }
+
+    private void appendInventoryEvent(
+            String eventType,
+            InventoryReservation reservation,
+            RequestContext context,
+            Instant occurredAt) {
+        outbox.append(
+                "InventoryReservation",
+                reservation.getId(),
+                eventType,
+                EventLifecycleEvents.VERSION,
+                new EventLifecycleEvents.InventoryReservationChangedV1(
+                        reservation.getId(),
+                        reservation.getEventId(),
+                        reservation.getTicketTypeId(),
+                        reservation.getRequesterId(),
+                        reservation.getQuantity(),
+                        reservation.getStatus(),
+                        reservation.getExpiresAt(),
+                        occurredAt),
+                context,
+                occurredAt);
+    }
+
+    private RequestContext systemContext(String operation, String reference) {
+        String normalized = reference.replaceAll("[^A-Za-z0-9._:-]", "-");
+        String correlationId = operation + ":" + normalized;
+        return new RequestContext(correlationId.substring(0, Math.min(correlationId.length(), 128)), null);
     }
 }

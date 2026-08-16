@@ -17,9 +17,36 @@ spring:
     locations: classpath:db/migration
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${ATTENDEE_KAFKA_GROUP:attendee-service-v1}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
 platform:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER:urn:event-platform:auth}
+      audience: ${JWT_AUDIENCE:event-platform-api}
+      jwk-set-uri: ${AUTH_JWK_SET_URI:http://localhost:8081/api/v1/auth/.well-known/jwks.json}
+    qr:
+      signing-secret: ${TICKET_QR_SIGNING_SECRET:}
+      allow-ephemeral-key: ${TICKET_QR_ALLOW_EPHEMERAL_KEY:true}
+      issuer: ${TICKET_QR_ISSUER:urn:event-platform:attendee-service}
+  event-service:
+    base-url: ${EVENT_SERVICE_URL:http://localhost:8082}
+    timeout: ${EVENT_SERVICE_TIMEOUT:3s}
+  holds:
+    expiry-enabled: ${ATTENDEE_HOLD_EXPIRY_ENABLED:true}
+    expiry-interval: ${ATTENDEE_HOLD_EXPIRY_INTERVAL:30s}
+  integration-events:
+    enabled: ${ATTENDEE_EVENT_CONSUMER_ENABLED:true}
+    event-topic: ${EVENT_LIFECYCLE_TOPIC:event-platform.event-lifecycle.v1}
+  outbox:
+    enabled: ${ATTENDEE_OUTBOX_ENABLED:true}
+    topic: ${ATTENDEE_LIFECYCLE_TOPIC:event-platform.attendee-lifecycle.v1}
+    batch-size: ${ATTENDEE_OUTBOX_BATCH_SIZE:50}
+    publish-interval: ${ATTENDEE_OUTBOX_PUBLISH_INTERVAL:1s}
   metadata:
-    description: Attendee and future booking boundary; business capabilities are deferred
+    description: Attendee profiles, booking process state, ticket holds, signed tickets, and check-in
     version: ${APP_VERSION:@project.version@}
     api-version: v1
 management:
